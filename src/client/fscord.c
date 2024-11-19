@@ -78,10 +78,9 @@ fscord_init(Fscord *fscord, void *memory, size_t memory_size)
     fscord->sound_user_disconnected = asset_manager_load_sound(1);
 
     os_net_secure_streams_init(arena, 1);
-
     fscord->server_pub_rsa = rsa_create_via_file(arena, "./server_pubkey.pem", true);
 
-
+    fscord->login = login_create(arena);
     fscord->is_login = true;
 
     return true;

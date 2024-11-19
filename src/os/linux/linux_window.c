@@ -104,8 +104,14 @@ os_window_swap_buffers(OSWindow *window, OSOffscreenBuffer *offscreen_buffer)
 
 
 #define ADD_KEY_PRESS(c) \
-    event->type  = OS_EVENT_KEY_PRESS; \
+    event->type = OS_EVENT_KEY_PRESS; \
     event->key_press.code = c; \
+    event->key_press.is_unicode = true; \
+    return true;
+#define ADD_SPECIAL_KEY_PRESS(c) \
+    event->type = OS_EVENT_KEY_PRESS; \
+    event->key_press.code = c; \
+    event->key_press.is_unicode = false; \
     return true;
 
 b32
@@ -158,10 +164,10 @@ os_window_get_event(OSWindow *window, OSEvent *event)
                 else if (keysym == XK_Return)      {ADD_KEY_PRESS('\r');  }
                 else if (keysym == XK_BackSpace)   {ADD_KEY_PRESS(8);     }
                 else if (keysym == XK_Delete)      {ADD_KEY_PRESS(127);   } 
-                else if (keysym == XK_Left)        {ADD_KEY_PRESS(OS_KEYCODE_LEFT); }
-                else if (keysym == XK_Right)       {ADD_KEY_PRESS(OS_KEYCODE_RIGHT);}
-                else if (keysym == XK_Up)          {ADD_KEY_PRESS(OS_KEYCODE_UP);   }
-                else if (keysym == XK_Down)        {ADD_KEY_PRESS(OS_KEYCODE_DOWN); }
+                else if (keysym == XK_Left)        {ADD_SPECIAL_KEY_PRESS(OS_KEYCODE_LEFT); }
+                else if (keysym == XK_Right)       {ADD_SPECIAL_KEY_PRESS(OS_KEYCODE_RIGHT);}
+                else if (keysym == XK_Up)          {ADD_SPECIAL_KEY_PRESS(OS_KEYCODE_UP);   }
+                else if (keysym == XK_Down)        {ADD_SPECIAL_KEY_PRESS(OS_KEYCODE_DOWN); }
                 else if (keysym == XK_Shift_L)     is_shift_l = true;
                 else if (keysym == XK_Shift_R)     is_shift_r = true;
                 else if (keysym == XK_Caps_Lock)   is_caps = true;
@@ -186,7 +192,10 @@ os_window_get_event(OSWindow *window, OSEvent *event)
     }
     return false;
 }
+
 #undef ADD_KEY_PRESS
+#undef ADD_SPECIAL_KEY_PRESS
+
 
 void os_window_destroy(OSWindow *window) {
     os_window_destroy_offscreen_buffer(&window->offscreen_buffer);

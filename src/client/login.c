@@ -36,6 +36,10 @@ login_draw(Fscord *fscord)
     draw_rectf32(offscreen, widgets_bg_rect, v3f32(0.8, 0.6, 0.4));
 
     // draw textboxes
+    // Todo: make a proper layout
+    Font *font = fscord->font;
+    draw_string32(offscreen, v2f32(0, 0), login->servername, font);
+    draw_string32(offscreen, v2f32(0, font->y_advance), login->username, font);
 }
 
 
@@ -96,23 +100,23 @@ login_process_special_key_press(Fscord *state, OSKeyPress key_press)
 {
     Login *view = state->login;
 
-    size_t *cursor;
     String32 *str;
+    size_t *cursor;
     if (view->is_username_active) {
-        cursor = &view->username_cursor;
         str = view->username;
+        cursor = &view->username_cursor;
     } else {
-        cursor = &view->servername_cursor;
         str = view->servername;
+        cursor = &view->servername_cursor;
     }
 
     switch (key_press.code) {
         case OS_KEYCODE_LEFT: {
             string32_move_cursor_left(str, cursor);
-            if (*cursor > 0) (*cursor)--;
         } break;
 
         case OS_KEYCODE_RIGHT: {
+            string32_move_cursor_right(str, cursor);
         } break;
 
         default:;

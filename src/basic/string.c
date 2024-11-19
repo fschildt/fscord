@@ -22,15 +22,24 @@ string32_move_cursor_right(String32 *str, size_t *cursor)
 b32
 string32_delete_left(String32 *str, size_t *cursor)
 {
+    if (*cursor > 0) {
+        size_t move_count = str->len - *cursor;
+        memmove(&str->p[*cursor-1], &str->p[*cursor], move_count*4);
+        str->len--;
+        *cursor -= 1;
+        return true;
+    }
     return false;
 }
 
 b32
 string32_delete_right(String32 *str, size_t *cursor)
 {
-    if (index >= 0) {
-        size_t move_count = str->len - *cursor;
-        memmove(&str->p[*cursor]-1, &str->p[*cursor], move_count);
+    // 01234
+    if (*cursor < str->len) {
+        size_t move_count = str->len - *cursor - 1;
+        printf("cursor = %lu, len = %u, move_count = %lu\n", *cursor, str->len, move_count);
+        memmove(&str->p[*cursor], &str->p[*cursor+1], move_count*4);
         str->len--;
         return true;
     }
@@ -40,11 +49,12 @@ string32_delete_right(String32 *str, size_t *cursor)
 b32
 string32_insert(String32 *str, u32 codepoint, size_t *cursor)
 {
-    if (*cursor < str->len && *cursor < str->max_len) {
+    if (*cursor <= str->len && *cursor < str->max_len) {
         size_t move_count = str->len - *cursor;
-        memmove(&str->p[*cursor]+1, &str->p[*cursor], move_count);
+        memmove(&str->p[*cursor+1], &str->p[*cursor], move_count*4);
         str->p[*cursor] = codepoint;
         str->len++;
+        *cursor += 1;
         return true;
     }
     return false;
@@ -66,14 +76,6 @@ string32_edit(String32 *str, OSKeyPress key_press, size_t *cursor)
         default: {
             string32_insert(str, key_press.code, cursor);
         }
-        }
-    }
-    else {
-        if (key_press.code == OS_KEYCODE_LEFT) {
-            string32_move_cursor_left(str, cursor);
-        }
-        else if (key_press.code == OS_KEYCODE_RIGHT) {
-            string32_move_cursor_right(str, cursor);
         }
     }
 }
