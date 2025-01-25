@@ -42,9 +42,6 @@ login_draw(Fscord *fscord)
 
     String32 *trans_servername = string32_create_from_string32_buffer(trans_arena, login->servername);
     String32 *trans_username = string32_create_from_string32_buffer(trans_arena, login->username);
-    printf("printing strings\n");
-    string32_print(trans_servername);
-    string32_print(trans_username);
     draw_string32(offscreen, v2f32(0, 0), trans_servername, font);
     draw_string32(offscreen, v2f32(0, font->y_advance), trans_username, font);
 }
