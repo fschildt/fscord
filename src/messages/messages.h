@@ -2,7 +2,7 @@
 #define FSCORD_MESSAGES_H
 
 #include <basic/basic.h>
-#include <basic/string.h>
+#include <basic/string32.h>
 #include <os/os.h>
 #include <crypto/aes_gcm.h>
 

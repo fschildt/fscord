@@ -1,7 +1,7 @@
-#include "basic/string.h"
+#include <basic/string32.h>
 #include <client/login.h>
 #include <client/fscord.h>
-#include <client/string_handles.h>
+#include <client/string32_handles.h>
 #include <client/draw.h>
 #include <client/font.h>
 
@@ -18,6 +18,7 @@ login_draw(Fscord *fscord)
 {
     Login *login = fscord->login;
     OSOffscreenBuffer *offscreen = fscord->offscreen_buffer;
+    MemArena *trans_arena = &fscord->trans_arena;
 
     // draw background color
     RectF32 bg_rect = rectf32(0, 0, offscreen->width, offscreen->height);
@@ -38,13 +39,19 @@ login_draw(Fscord *fscord)
     // draw textboxes
     // Todo: make a proper layout
     Font *font = fscord->font;
-    draw_string32(offscreen, v2f32(0, 0), login->servername, font);
-    draw_string32(offscreen, v2f32(0, font->y_advance), login->username, font);
+
+    String32 *trans_servername = string32_create_from_string32_buffer(trans_arena, login->servername);
+    String32 *trans_username = string32_create_from_string32_buffer(trans_arena, login->username);
+    printf("printing strings\n");
+    string32_print(trans_servername);
+    string32_print(trans_username);
+    draw_string32(offscreen, v2f32(0, 0), trans_servername, font);
+    draw_string32(offscreen, v2f32(0, font->y_advance), trans_username, font);
 }
 
 
 internal_fn b32
-parse_servername(String32 *servername, char *address, size_t address_size, u16 *port)
+parse_servername(String32Buffer *servername, char *address, size_t address_size, u16 *port)
 {
     u32 *p0 = servername->p;
     u32 *p1 = servername->p;
@@ -100,23 +107,20 @@ login_process_special_key_press(Fscord *state, OSKeyPress key_press)
 {
     Login *view = state->login;
 
-    String32 *str;
-    size_t *cursor;
+    String32Buffer *buffer;
     if (view->is_username_active) {
-        str = view->username;
-        cursor = &view->username_cursor;
+        buffer = view->username;
     } else {
-        str = view->servername;
-        cursor = &view->servername_cursor;
+        buffer = view->servername;
     }
 
     switch (key_press.code) {
         case OS_KEYCODE_LEFT: {
-            string32_move_cursor_left(str, cursor);
+            string32_buffer_move_cursor_left(buffer);
         } break;
 
         case OS_KEYCODE_RIGHT: {
-            string32_move_cursor_right(str, cursor);
+            string32_buffer_move_cursor_right(buffer);
         } break;
 
         default:;
@@ -139,7 +143,7 @@ login_process_unicode_key_press(Fscord *fscord, OSKeyPress key_press)
             }
 
             if (login->username->len <= 0) {
-                login->warning = g_login_warning_username_invalid;
+                login->warning = SH_LOGIN_WARNING_USERNAME_INVALID;
                 break;
             }
 
@@ -154,20 +158,17 @@ login_process_unicode_key_press(Fscord *fscord, OSKeyPress key_press)
             // Todo: call this from another thread to avoid stalling the program
             fscord->secure_stream = os_net_secure_stream_connect(address, port, fscord->server_pub_rsa);
 
-            login->warning = g_login_warning_connecting;
+            login->warning = SH_LOGIN_WARNING_CONNECTING;
         } break;
 
         default: {
-            String32 *str;
-            size_t *cursor;
+            String32Buffer *buffer;
             if (login->is_username_active) {
-                str = login->username;
-                cursor = &login->username_cursor;
+                buffer = login->username;
             } else {
-                str = login->servername;
-                cursor = &login->servername_cursor;
+                buffer = login->servername;
             }
-            string32_edit(str, key_press, cursor);
+            string32_buffer_edit(buffer, key_press);
         }
     }
 }
@@ -176,7 +177,7 @@ internal_fn void
 login_process_key_press(Fscord *fscord, OSKeyPress key_press)
 {
     Login *login = fscord->login;
-    login->warning = g_empty_string32;
+    login->warning = SH_EMPTY;
 
     if (key_press.is_unicode) {
         login_process_unicode_key_press(fscord, key_press);
@@ -197,11 +198,9 @@ Login *
 login_create(MemArena *arena)
 {
     Login *login = mem_arena_push(arena, sizeof(Login));
-    login->username = string32_create(arena, 32);
-    login->username_cursor = 0;
-    login->servername = string32_create(arena, 32);
-    login->servername_cursor = 0;
-    login->warning = g_empty_string32;
+    login->username = string32_buffer_create(arena, 32);
+    login->servername = string32_buffer_create(arena, 32);
+    login->warning = SH_EMPTY;
     return login;
 }
 

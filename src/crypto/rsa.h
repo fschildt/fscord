@@ -1,6 +1,5 @@
 #include <basic/basic.h>
 #include <basic/mem_arena.h>
-#include <basic/string.h>
 #include <openssl/evp.h>
 
 // the arena is only used for reading the file, evp_pkey is stored on heap in ssl

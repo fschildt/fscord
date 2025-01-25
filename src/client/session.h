@@ -2,20 +2,20 @@
 #define SESSION_H
 
 #include <basic/mem_arena.h>
-#include <basic/string.h>
+#include <basic/string32.h>
 #include <basic/time.h>
 #include <os/os.h>
 
 struct Fscord;
 
 typedef struct {
-    String32 *name;
+    String32Buffer *name;
 } User;
 
 typedef struct {
     Time creation_time;
-    String32 *sender_name;
-    String32 *content;
+    String32Buffer *sender_name;
+    String32Buffer *content;
 } ChatMessage;
 
 typedef struct {
@@ -28,7 +28,7 @@ typedef struct {
     size_t max_message_count;
     ChatMessage *messages;
 
-    String32 *prompt;
+    String32Buffer *prompt;
     size_t prompt_cursor;
 } Session;
 

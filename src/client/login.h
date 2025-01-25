@@ -1,21 +1,20 @@
 #ifndef LOGIN_H
 #define LOGIN_H
 
+#include <basic/string32.h>
 #include <os/os.h>
-#include <basic/string.h>
 #include <crypto/rsa.h>
 #include <crypto/aes_gcm.h>
+#include <client/string32_handles.h>
 
 struct Fscord;
 
 typedef struct {
     b32 is_username_active; // else servername is selected
 
-    String32 *username;
-    size_t username_cursor;
-    String32 *servername;
-    size_t servername_cursor;
-    String32 *warning;
+    String32Buffer *username;
+    String32Buffer *servername;
+    String32Handle warning;
 
     EVP_PKEY *rsa_client_pri;
     EVP_PKEY *rsa_server_pub;

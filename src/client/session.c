@@ -1,4 +1,4 @@
-#include <basic/string.h>
+#include <basic/string32.h>
 #include <os/os.h>
 #include <client/fscord.h>
 #include <client/session.h>
@@ -16,7 +16,6 @@ session_draw_chat_message(ChatMessage *message, V2F32 pos)
     Font *font = s_fscord->font;
     MemArena *trans_arena = &s_fscord->trans_arena;
 
-    String32 *str;
     f32 str_width;
     f32 dx = font->y_advance / 2.f;
 
@@ -27,31 +26,32 @@ session_draw_chat_message(ChatMessage *message, V2F32 pos)
     // draw local time
     time_t local_time_src = message->creation_time.seconds;
 	struct tm *local_time = localtime(&local_time_src);
-    char tmp_time_len = 5;
-    char tmp_time[tmp_time_len+1];
-    sprintf(tmp_time, "%.2d:%.2d", local_time->tm_hour, local_time->tm_min);
 
-    str = string32_create(trans_arena, 5);
-    string32_copy_ascii_cstr(str, tmp_time);
+    char time_cstr_len = 5;
+    char time_cstr[time_cstr_len+1];
+    sprintf(time_cstr, "%.2d:%.2d", local_time->tm_hour, local_time->tm_min);
 
-    draw_string32(screen, pos, str, font);
-    str_width = font_string32_width(font, str);
+    String32 *time_str = string32_create_from_ascii(trans_arena, time_cstr);
+    draw_string32(screen, pos, time_str, font);
+    str_width = font_string32_width(font, time_str);
     pos.x += str_width + dx;
 
 
     // draw sender_name
-    str = string32_create(trans_arena, message->sender_name->len + 2);
-    string32_append_ascii_cstr(str, "<");
-    string32_append_string32(str, message->sender_name);
-    string32_append_ascii_cstr(str, ">");
+    String32Buffer *sender_name_buff = string32_buffer_create(trans_arena, message->sender_name->len + 2);
+    string32_buffer_append_ascii_cstr(sender_name_buff, "<");
+    string32_buffer_append_string32_buffer(sender_name_buff, message->sender_name);
+    string32_buffer_append_ascii_cstr(sender_name_buff, ">");
 
-    draw_string32(screen, pos, str, font);
-    str_width = font_string32_width(font, str);
+    String32 *sender_name = string32_create_from_string32_buffer(trans_arena, sender_name_buff);
+    draw_string32(screen, pos, sender_name, font);
+    str_width = font_string32_width(font, sender_name);
     pos.x += str_width + dx;
 
 
     // draw content
-    draw_string32(screen, pos, message->content, font);
+    String32 *content = string32_create_from_string32_buffer(trans_arena, message->content);
+    draw_string32(screen, pos, content, font);
 }
 
 internal_fn void
@@ -96,6 +96,7 @@ internal_fn void
 session_draw_prompt(Session *session, RectF32 rect)
 {
     OSOffscreenBuffer *screen = s_fscord->offscreen_buffer;
+    MemArena *trans_arena = &s_fscord->trans_arena;
     Font *font = s_fscord->font;
 
 
@@ -110,7 +111,8 @@ session_draw_prompt(Session *session, RectF32 rect)
     f32 xmargin = border_size * 4;
     f32 ymargin = border_size * 4;
     V2F32 pos = v2f32(rect.x0 + xmargin, rect.y0 + ymargin);
-    draw_string32(screen, pos, session->prompt, font);
+    String32 *prompt_str = string32_create_from_string32_buffer(trans_arena, session->prompt);
+    draw_string32(screen, pos, prompt_str, font);
 
 
     // draw cursor
@@ -148,13 +150,12 @@ session_draw_users(Session *session, RectF32 rect)
         f32 width_remain = rect.x1 - pos.x;
         User *user = &session->users[i];
 
-        // Todo: the render should draw partial characters based on a rect
+        // Todo: the render should draw partial characters based on rectangle boundaries
         size_t name_len_desired = user->name->len;
         size_t name_len_avail = font_string32_len_via_width(font, width_remain);
         size_t name_len = name_len_desired <= name_len_avail ? name_len_desired : name_len_avail;
-        String32 *str = string32_create(trans_arena, name_len);
-        string32_copy_string32_with_count(str, user->name, name_len);
-        draw_string32(screen, pos, str, font);
+        String32 *username = string32_create_from_string32_buffer_with_len(trans_arena, user->name, name_len);
+        draw_string32(screen, pos, username, font);
         pos.y -= dy;
     }
 }
@@ -211,8 +212,8 @@ session_add_chat_message(Session *session, Time creation_time, String32 *sender_
 
     ChatMessage *message = &session->messages[i];
     message->creation_time = creation_time;
-    string32_copy_string32(message->sender_name, sender_name);
-    string32_copy_string32(message->content, content);
+    string32_buffer_copy_string32(message->sender_name, sender_name);
+    string32_buffer_copy_string32(message->content, content);
 
     if (session->cur_message_count < session->max_message_count) {
         session->cur_message_count++;
@@ -225,7 +226,7 @@ session_rm_user(Session *session, String32 *username)
     // Todo: use a hashmap
     size_t rm_idx = SIZE_MAX;
     for (size_t i = 0; i < session->cur_user_count; i++) {
-        if (string32_equal(session->users[i].name, username)) {
+        if (string32_buffer_equal_string32(session->users[i].name, username)) {
             rm_idx = i;
             break;
         }
@@ -234,7 +235,7 @@ session_rm_user(Session *session, String32 *username)
 
     size_t last_idx = session->cur_user_count - 1;
     for (size_t i = rm_idx + 1; i <= last_idx; i++) {
-        string32_copy_string32(session->users[i-1].name, session->users[i].name);
+        string32_buffer_copy_string32_buffer(session->users[i-1].name, session->users[i].name);
     }
 
     session->cur_user_count -= 1;
@@ -246,22 +247,25 @@ session_add_user(Session *session, String32 *username)
     assert(session->cur_user_count < session->max_user_count);
 
     User *user = &session->users[session->cur_user_count++];
-    string32_copy_string32(user->name, username);
+    string32_buffer_copy_string32(user->name, username);
 }
 
 void
 session_process_event(Session *session, OSEvent *event)
 {
+    MemArena *trans_arena = &s_fscord->trans_arena;
+
     switch (event->type) {
     case OS_EVENT_KEY_PRESS: {
         u32 codepoint = event->key_press.code;
         if (codepoint == '\r') {
-            msg_chat_message(session->prompt);
-            string32_reset(session->prompt);
+            String32 *trans_prompt = string32_create_from_string32_buffer(trans_arena, session->prompt);
+            msg_chat_message(trans_prompt);
+            string32_buffer_reset(session->prompt);
             session->prompt_cursor = 0;
         }
         else {
-            string32_edit(session->prompt, event->key_press, &session->prompt_cursor);
+            string32_buffer_edit(session->prompt, event->key_press);
         }
     }
     break;
@@ -280,7 +284,7 @@ session_reset(Session *session)
     session->message0 = 0;
     session->cur_message_count = 0;
 
-    string32_reset(session->prompt);
+    string32_buffer_reset(session->prompt);
 }
 
 Session *
@@ -293,7 +297,7 @@ session_create(MemArena *arena, struct Fscord *fscord)
     session->max_user_count = max_user_count;
     session->users = mem_arena_push(arena, max_user_count * sizeof(User));
     for (size_t i = 0; i < max_user_count; i++) {
-        session->users[i].name = string32_create(arena, MESSAGES_MAX_MESSAGE_LEN);
+        session->users[i].name = string32_buffer_create(arena, MESSAGES_MAX_MESSAGE_LEN);
     }
 
     size_t max_message_count = 256;
@@ -302,11 +306,11 @@ session_create(MemArena *arena, struct Fscord *fscord)
     session->max_message_count = max_message_count;
     session->messages = mem_arena_push(arena, max_message_count * sizeof(ChatMessage));
     for (size_t i = 0; i < max_message_count; i++) {
-        session->messages[i].sender_name = string32_create(arena, MESSAGES_MAX_USERNAME_LEN);
-        session->messages[i].content = string32_create(arena, MESSAGES_MAX_MESSAGE_LEN);
+        session->messages[i].sender_name = string32_buffer_create(arena, MESSAGES_MAX_USERNAME_LEN);
+        session->messages[i].content = string32_buffer_create(arena, MESSAGES_MAX_MESSAGE_LEN);
     }
 
-    session->prompt = string32_create(arena, 1024);
+    session->prompt = string32_buffer_create(arena, 1024);
 
     s_fscord = fscord;
 

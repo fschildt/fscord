@@ -1,6 +1,6 @@
 #include "basic/mem_arena.h"
 #include <os/os.h>
-#include <basic/string.h>
+#include <basic/string32.h>
 #include <messages//messages.h>
 
 #include <string.h>

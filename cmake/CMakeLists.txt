@@ -16,7 +16,7 @@ set_property(TARGET fscord PROPERTY C_STANDARD 99)
 target_sources(fscord PUBLIC
     ${FSCORD_SRC_DIR}/basic/mem_arena.c
     ${FSCORD_SRC_DIR}/basic/math.c
-    ${FSCORD_SRC_DIR}/basic/string.c
+    ${FSCORD_SRC_DIR}/basic/string32.c
     ${FSCORD_SRC_DIR}/client/fscord.c
     ${FSCORD_SRC_DIR}/client/draw.c
     ${FSCORD_SRC_DIR}/client/asset_manager.c
@@ -24,7 +24,7 @@ target_sources(fscord PUBLIC
     ${FSCORD_SRC_DIR}/client/font.c
     ${FSCORD_SRC_DIR}/client/login.c
     ${FSCORD_SRC_DIR}/client/session.c
-    ${FSCORD_SRC_DIR}/client/string_handles.c
+    ${FSCORD_SRC_DIR}/client/string32_handles.c
     ${FSCORD_SRC_DIR}/crypto/aes_gcm.c
     ${FSCORD_SRC_DIR}/crypto/rsa.c
     ${FSCORD_SRC_DIR}/messages/messages.c

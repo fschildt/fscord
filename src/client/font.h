@@ -2,7 +2,7 @@
 #define FONT_H
 
 #include <basic/basic.h>
-#include <basic/string.h>
+#include <basic/string32.h>
 
 typedef struct {
     i32 width;

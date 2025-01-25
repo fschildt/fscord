@@ -130,18 +130,17 @@ void draw_string32(OSOffscreenBuffer *screen, V2F32 pos, String32 *str, Font *fo
     f32 glyph_x = pos.x;
     f32 glyph_y = pos.y + font->baseline;
 
-    u32 *c = str->p;
     for (int i = 0; i < str->len; i++) {
-        Glyph *glyph = font_get_glyph(font, *c);
+        u32 codepoint = str->p[i];
+        Glyph *glyph = font_get_glyph(font, codepoint);
 
-        if (*c != ' ') {
+        if (codepoint != ' ') {
             Bitmap *mono_bitmap = &glyph->bitmap;
             V2F32 glyph_pos = v2f32(glyph_x + glyph->xoff, glyph_y + glyph->yoff);
             draw_mono_bitmap(screen, glyph_pos, mono_bitmap, color);
         }
 
         glyph_x += glyph->xadvance;
-        c++;
     }
 }
 

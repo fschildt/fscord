@@ -1,12 +1,12 @@
 #include <client/fscord.h>
 #include <basic/basic.h>
 #include <basic/mem_arena.h>
-#include <basic/string.h>
+#include <basic/string32.h>
 #include <os/os.h>
 #include <messages/messages.h>
 #include <client/login.h>
 #include <client/session.h>
-#include <client/string_handles.h>
+#include <client/string32_handles.h>
 
 typedef struct Fscord Fscord;
 
@@ -49,28 +49,40 @@ fscord_update(Fscord *fscord)
     return true;
 }
 
-internal_fn b32
-fscord_init(Fscord *fscord, void *memory, size_t memory_size)
+internal_fn Fscord *
+fscord_create(void *memory, size_t memory_size)
 {
-    MemArena *arena = &fscord->arena;
-    mem_arena_init(arena, memory, memory_size);
+    Fscord *fscord = memory;
+    memory += sizeof(*fscord);
+    memory_size -= sizeof(*fscord);
 
-    string_handles_create(arena);
-    string_handles_load_language();
+    size_t arena_size = MEBIBYTES(10) - sizeof(*fscord);
+
+    MemArena *arena = &fscord->arena;
+    mem_arena_init(arena, memory, arena_size);
+    memory += arena_size;
+    memory_size -= arena_size;
+
+    MemArena *trans_arena = &fscord->trans_arena;
+    mem_arena_init(&fscord->trans_arena, memory, memory_size); // take the rest of memory
+
+
+    string32_handles_create(arena);
+    string32_handles_load_language();
 
     fscord->window = os_window_create("fscord", 1024, 720);
     if (!fscord->window) {
-        return false;
+        return 0;
     }
 
     fscord->offscreen_buffer = os_offscreen_buffer_create(1024, 720);
     if (!fscord->offscreen_buffer) {
-        return false;
+        return 0;
     }
 
     fscord->sound_player = os_sound_player_create(arena, 44100);
     if (!fscord->sound_player) {
-        return false;
+        return 0;
     }
 
     fscord->font = asset_manager_load_font();
@@ -83,22 +95,12 @@ fscord_init(Fscord *fscord, void *memory, size_t memory_size)
     fscord->login = login_create(arena);
     fscord->is_login = true;
 
-    return true;
+    return fscord;
 }
 
 internal_fn void
-fscord_main()
+fscord_main(Fscord *fscord)
 {
-    OSMemory memory;
-    if (!os_memory_allocate(&memory, MEBIBYTES(20))) {
-        return;
-    }
-
-    Fscord *fscord = (Fscord*)memory.p;
-    if (!fscord_init(fscord, memory.p+sizeof(*fscord), memory.size-sizeof(*fscord))) {
-        return;
-    }
-
     b32 running = true;
     while (running) {
         running = fscord_update(fscord);
@@ -110,7 +112,17 @@ fscord_main()
 
 int main(void)
 {
-    fscord_main();
+    OSMemory memory;
+    if (!os_memory_allocate(&memory, MEBIBYTES(20))) {
+        return 0;
+    }
+
+    Fscord *fscord = fscord_create(memory.p, memory.size);
+    if (!fscord) {
+        return 0;
+    }
+
+    fscord_main(fscord);
     return 0;
 }
 
