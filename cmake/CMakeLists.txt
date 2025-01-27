@@ -25,6 +25,7 @@ target_sources(fscord PUBLIC
     ${FSCORD_SRC_DIR}/client/login.c
     ${FSCORD_SRC_DIR}/client/session.c
     ${FSCORD_SRC_DIR}/client/string32_handles.c
+    ${FSCORD_SRC_DIR}/client/server_connection.c
     ${FSCORD_SRC_DIR}/crypto/aes_gcm.c
     ${FSCORD_SRC_DIR}/crypto/rsa.c
     ${FSCORD_SRC_DIR}/messages/messages.c
