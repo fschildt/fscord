@@ -165,6 +165,20 @@ string32_buffer_copy_string32(String32Buffer *buffer, String32 *str)
 }
 
 
+b32 string32_buffer_equal_string32(String32Buffer *buffer, String32 *str)
+{
+    if (buffer->len != str->len) {
+        return false;
+    }
+    for (size_t i = 0; i < buffer->len; i++) {
+        if (buffer->p[i] != str->p[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
 void
 string32_buffer_print(String32Buffer *buffer)
 {
@@ -227,16 +241,37 @@ string32_equal(String32 *str1, String32 *str2)
 }
 
 
+internal_fn void
+string32_push_extra(MemArena *arena, size_t total_len)
+{
+    size_t extra_len = total_len > 1 ? total_len-1 : 0;
+    if (extra_len) {
+        mem_arena_push(arena, extra_len * sizeof(u32));
+    }
+}
+
+
+String32 *
+string32_create_from_u32_array(MemArena *arena, u32 *buffer, size_t len)
+{
+    String32 *str = mem_arena_push(arena, sizeof(String32));
+    string32_push_extra(arena, len);
+
+    memcpy(str->p, buffer, len);
+    str->len = len;
+
+    return str;
+}
+
+
 String32 *
 string32_create_from_string32_buffer_with_len(MemArena *arena, String32Buffer *buffer, size_t len)
 {
     String32 *str = mem_arena_push(arena, sizeof(String32));
-    size_t extra_len = len > 1 ? len-1 : 0;
-    if (extra_len) {
-        mem_arena_push(arena, extra_len * sizeof(u32));
-    }
+    string32_push_extra(arena, len);
 
     memcpy(str->p, buffer->p, len);
+    str->len = len;
 
     return str;
 }
@@ -246,10 +281,7 @@ String32 *
 string32_create_from_string32_buffer(MemArena *arena, String32Buffer *buffer)
 {
     String32 *str = mem_arena_push(arena, sizeof(String32));
-    size_t extra_len = buffer->len > 1 ? buffer->len-1 : 0;
-    if (extra_len) {
-        mem_arena_push(arena, extra_len * sizeof(u32));
-    }
+    string32_push_extra(arena, buffer->len);
 
     memcpy(str->p, buffer->p, buffer->len * sizeof(u32));
     str->len = buffer->len;
@@ -259,20 +291,30 @@ string32_create_from_string32_buffer(MemArena *arena, String32Buffer *buffer)
 
 
 String32 *
+string32_create_from_string32(MemArena *arena, String32 *src)
+{
+    String32 *str = mem_arena_push(arena, sizeof(String32));
+    string32_push_extra(arena, src->len);
+    for (size_t i = 0; i < src->len; i++) {
+        str->p[i] = src->p[i];
+    }
+    str->len = src->len;
+    return str;
+}
+
+
+String32 *
 string32_create_from_ascii(MemArena *arena, char *ascii)
 {
-    String32 *str32 = mem_arena_push(arena, sizeof(String32));
-
     size_t len = strlen(ascii);
-    if (len > 1) {
-        mem_arena_push(arena, (len-1)*sizeof(u32));
-    }
+
+    String32 *str32 = mem_arena_push(arena, sizeof(String32));
+    string32_push_extra(arena, len);
 
     u32 *dest = str32->p;
     while (*ascii) {
         *dest++ = *ascii++;
     }
-
     str32->len = len;
 
     return str32;

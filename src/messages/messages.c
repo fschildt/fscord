@@ -5,82 +5,104 @@
 
 #include <string.h>
 
+
 internal_var OSNetSecureStream *s_secure_stream;
 internal_var MemArena s_arena;
 
+
 void
-msg_login_request(String32 *password, String32 *username)
+c2s_chat_message(String32 *content)
 {
-    MsgLoginRequest *login_request = mem_arena_push(&s_arena, sizeof(MsgLoginRequest));
-    login_request->message_type = MSG_TYPE_LOGIN_REQUEST;
-    login_request->password_len = password->len;
-    login_request->username_len = username->len;
+    C2S_ChatMessage *chat_message = mem_arena_push(&s_arena, sizeof(C2S_ChatMessage));
 
-    u32 *password_data = mem_arena_push(&s_arena, password->len * sizeof(u32));
-    memcpy(password_data, password->p, password->len);
+    String32 *content_copy = string32_create_from_string32(&s_arena, content);
+    chat_message->content = (String32*)((u8*)content_copy - s_arena.size_used);
 
-    u32 *username_data = mem_arena_push(&s_arena, username->len * sizeof(u32));
-    memcpy(username_data, username->p, username->len);
-
+    chat_message->header.type = C2S_CHAT_MESSAGE;
+    chat_message->header.size = s_arena.size_used;
 
     os_net_secure_stream_send(s_secure_stream, s_arena.memory, s_arena.size_used);
-
     mem_arena_reset(&s_arena);
 }
 
+
 void
-msg_online_status(String32 *username, u32 value)
+c2s_login(String32 *username, String32 *password)
 {
-    MsgOnlineStatus *online_status = mem_arena_push(&s_arena, sizeof(MsgOnlineStatus));
-    online_status->message_type = MSG_TYPE_ONLINE_STATUS;
-    online_status->status = value;
-    online_status->username_len = username->len;
+    C2S_Login *login = mem_arena_push(&s_arena, sizeof(C2S_Login));
 
-    u32 *username_data = mem_arena_push(&s_arena, username->len * sizeof(u32));
-    memcpy(username_data, username->p, username->len);
+    String32 *username_copy = string32_create_from_string32(&s_arena, username);
+    login->username = (String32*)((u8*)username_copy - s_arena.size_used);
 
+    String32 *password_copy = string32_create_from_string32(&s_arena, password);
+    login->password = (String32*)((u8*)password_copy - s_arena.size_used);
+
+    login->header.type = C2S_LOGIN;
+    login->header.size = s_arena.size_used;
 
     os_net_secure_stream_send(s_secure_stream, s_arena.memory, s_arena.size_used);
-
     mem_arena_reset(&s_arena);
 }
 
-void
-msg_login_response(u32 login_result)
-{
-    MsgLoginResponse *response = mem_arena_push(&s_arena, sizeof(MsgLoginResponse));
-    response->message_type = MSG_TYPE_LOGIN_RESPONSE;
-    response->login_result = login_result;
-
-
-    os_net_secure_stream_send(s_secure_stream, s_arena.memory, s_arena.size_used);
-
-    mem_arena_reset(&s_arena);
-}
 
 void
-msg_chat_message(String32 *content)
+s2c_chat_message(String32 *username, String32 *content)
 {
     OSTime time = os_time_get_now();
 
-    MsgChatMessage *chat_message = mem_arena_push(&s_arena, sizeof(MsgChatMessage));
-    chat_message->message_type = MSG_TYPE_CHAT_MESSAGE;
-    chat_message->sender_username_len = 0;
-    chat_message->content_len = content->len;
+    S2C_ChatMessage *chat_message = mem_arena_push(&s_arena, sizeof(S2C_ChatMessage));
+
+    String32 *username_copy = string32_create_from_string32(&s_arena, username);
+    chat_message->username = (String32*)((u8*)username_copy - s_arena.size_used);
+
+    String32 *content_copy = string32_create_from_string32(&s_arena, content);
+    chat_message->content = (String32*)((u8*)content_copy - s_arena.size_used);
+
     chat_message->epoch_time_seconds = time.seconds;
     chat_message->epoch_time_nanoseconds = time.nanoseconds;
 
-    u32 *content_data = mem_arena_push(&s_arena, content->len * sizeof(u32));
-    memcpy(content_data, content->p, content->len);
-
+    chat_message->header.type = S2C_CHAT_MESSAGE;
+    chat_message->header.size = s_arena.size_used;
 
     os_net_secure_stream_send(s_secure_stream, s_arena.memory, s_arena.size_used);
-
     mem_arena_reset(&s_arena);
 }
 
+
 void
-msg_init(MemArena *arena, OSNetSecureStream *secure_stream)
+s2c_user_update(String32 *username, u32 online_status)
+{
+    S2C_UserUpdate *user_update = mem_arena_push(&s_arena, sizeof(S2C_UserUpdate));
+
+    user_update->status = online_status;
+
+    String32 *username_copy = string32_create_from_string32(&s_arena, username);
+    user_update->username = (String32*)((u8*)username_copy - s_arena.size_used);
+
+    user_update->header.type = S2C_USER_UPDATE;
+    user_update->header.size = s_arena.size_used;
+
+    os_net_secure_stream_send(s_secure_stream, s_arena.memory, s_arena.size_used);
+    mem_arena_reset(&s_arena);
+}
+
+
+void
+s2c_login(u32 login_result)
+{
+    S2C_Login *login = mem_arena_push(&s_arena, sizeof(S2C_Login));
+    login->login_result = login_result;
+
+    login->header.type = S2C_LOGIN;
+    login->header.size = s_arena.size_used;
+
+    os_net_secure_stream_send(s_secure_stream, s_arena.memory, s_arena.size_used);
+    mem_arena_reset(&s_arena);
+}
+
+
+void
+messages_init(MemArena *arena, OSNetSecureStream *secure_stream)
 {
     s_arena = mem_arena_make_subarena(arena, MESSAGES_MAX_PACKAGE_SIZE);
     s_secure_stream = secure_stream;

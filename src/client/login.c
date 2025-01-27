@@ -1,9 +1,11 @@
+#include "client/server_connection.h"
 #include <basic/string32.h>
 #include <client/login.h>
 #include <client/fscord.h>
 #include <client/string32_handles.h>
 #include <client/draw.h>
 #include <client/font.h>
+#include <crypto/rsa.h>
 
 #include <basic/basic.h>
 #include <basic/math.h>
@@ -134,26 +136,37 @@ login_process_unicode_key_press(Fscord *fscord, OSKeyPress key_press)
         } break;
 
         case '\r': {
-            OSNetSecureStreamStatus status = os_net_secure_stream_get_status(fscord->secure_stream);
-            if (status == OS_NET_SECURE_STREAM_HANDSHAKING) {
-                break;
+            ServerConnectionStatus status = server_connection_get_status();
+            if (status == SERVER_CONNECTION_ESTABLISHED) {
+                InvalidCodePath;
+                return;
             }
+            assert(status == SERVER_CONNECTION_NOT_ESTABLISHED);
+
 
             if (login->username->len <= 0) {
                 login->warning = SH_LOGIN_WARNING_USERNAME_INVALID;
                 break;
             }
 
-            size_t max_address_size = 64;
-            char address[max_address_size];
+
+            char address[64];
             u16 port;
-            if (!parse_servername(login->servername, address, max_address_size, &port)) {
+            if (!parse_servername(login->servername, address, ARRAY_COUNT(address), &port)) {
                 break;
             }
             printf("address = %s, port = %d\n", address, port);
 
+            // Todo: Does this belong here? I simply cut-pasted it from main.
+            // Todo: When disconnecting/reconnecting gets implemented this will LEAK!
+            EVP_PKEY *server_rsa_pub = rsa_create_via_file(&fscord->trans_arena, "./server_pubkey.pem", true);
+
             // Todo: call this from another thread to avoid stalling the program
-            fscord->secure_stream = os_net_secure_stream_connect(address, port, fscord->server_pub_rsa);
+            if (!server_connection_establish(address, port, server_rsa_pub)) {
+                rsa_destroy(server_rsa_pub);
+                login->warning = SH_EMPTY; // Todo: display proper error
+                return;
+            }
 
             login->warning = SH_LOGIN_WARNING_CONNECTING;
         } break;

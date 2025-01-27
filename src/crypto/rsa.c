@@ -154,17 +154,17 @@ rsa_create_via_pem(char *pem, size_t pem_len, b32 is_public)
 }
 
 EVP_PKEY *
-rsa_create_via_file(MemArena *arena, char *filepath, b32 is_public)
+rsa_create_via_file(MemArena *trans_arena, char *filepath, b32 is_public)
 {
     EVP_PKEY *key = 0;
 
-    size_t arena_save = mem_arena_save(arena);
+    size_t arena_save = mem_arena_save(trans_arena);
     size_t pem_len;
-    char *pem = os_read_file_as_string(arena, filepath, &pem_len);
+    char *pem = os_read_file_as_string(trans_arena, filepath, &pem_len);
     if (pem) {
         key = rsa_create_via_pem(pem, pem_len, is_public);
     }
-    mem_arena_restore(arena, arena_save);
+    mem_arena_restore(trans_arena, arena_save);
 
     return key;
 }

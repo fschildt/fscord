@@ -9,6 +9,7 @@
 #include <client/asset_manager.h>
 #include <client/login.h>
 #include <client/session.h>
+#include <client/server_connection.h>
 
 struct Fscord {
     MemArena arena;
@@ -19,9 +20,6 @@ struct Fscord {
     OSSoundPlayer *sound_player;
     OSSoundBuffer *sound_buffer;
 
-    EVP_PKEY *server_pub_rsa;
-    OSNetSecureStream *secure_stream;
-
     Font *font;
     f32 zoom;
 
@@ -30,7 +28,6 @@ struct Fscord {
     PlaySound ps_user_connected;
     PlaySound ps_user_disconnected;
 
-    b32 is_login;
     Login *login;
     Session *session;
 };

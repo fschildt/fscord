@@ -205,7 +205,7 @@ session_draw(Session *session)
     session_draw_chat(session, chat_rect);
 }
 
-internal_fn void
+void
 session_add_chat_message(Session *session, Time creation_time, String32 *sender_name, String32 *content)
 {
     size_t i = (session->message0 + session->cur_message_count) % session->max_message_count;
@@ -220,7 +220,7 @@ session_add_chat_message(Session *session, Time creation_time, String32 *sender_
     }
 }
 
-internal_fn void
+void
 session_rm_user(Session *session, String32 *username)
 {
     // Todo: use a hashmap
@@ -241,7 +241,7 @@ session_rm_user(Session *session, String32 *username)
     session->cur_user_count -= 1;
 }
 
-internal_fn void
+void
 session_add_user(Session *session, String32 *username)
 {
     assert(session->cur_user_count < session->max_user_count);
@@ -260,7 +260,7 @@ session_process_event(Session *session, OSEvent *event)
         u32 codepoint = event->key_press.code;
         if (codepoint == '\r') {
             String32 *trans_prompt = string32_create_from_string32_buffer(trans_arena, session->prompt);
-            msg_chat_message(trans_prompt);
+            c2s_chat_message(trans_prompt);
             string32_buffer_reset(session->prompt);
             session->prompt_cursor = 0;
         }

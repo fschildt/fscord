@@ -2,8 +2,8 @@
 #include <basic/mem_arena.h>
 #include <openssl/evp.h>
 
-// the arena is only used for reading the file, evp_pkey is stored on heap in ssl
-EVP_PKEY *rsa_create_via_file(MemArena *arena, char *filepath, b32 is_public);
+// The arena is only used during this function. It reads the file, converts it to EVP_PKEY and gets rid of the file again.
+EVP_PKEY *rsa_create_via_file(MemArena *trans_arena, char *filepath, b32 is_public);
 EVP_PKEY *rsa_create_via_gen(i32 keysize_in_bits);
 EVP_PKEY *rsa_create_via_pem(char *pem, size_t pem_len, b32 is_public);
 void      rsa_destroy(EVP_PKEY *key);

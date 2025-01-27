@@ -7,6 +7,7 @@
 #include <client/login.h>
 #include <client/session.h>
 #include <client/string32_handles.h>
+#include <client/server_connection.h>
 
 typedef struct Fscord Fscord;
 
@@ -14,6 +15,13 @@ internal_fn b32
 fscord_update(Fscord *fscord)
 {
     OSOffscreenBuffer *offscreen_buffer = fscord->offscreen_buffer;
+    ServerConnectionStatus connection_status;
+
+    connection_status = server_connection_get_status();
+    if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
+        server_connection_handle_events();
+    }
+
     OSEvent event;
     while (os_window_get_event(fscord->window, &event)) {
         if (event.type == OS_EVENT_WINDOW_RESIZE) {
@@ -23,19 +31,22 @@ fscord_update(Fscord *fscord)
         if (event.type == OS_EVENT_WINDOW_DESTROYED) {
             return false;
         }
-        if (fscord->is_login) {
-            login_process_event(fscord, &event);
+
+        connection_status = server_connection_get_status(); // This might be overkill.
+        if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
+            session_process_event(fscord->session, &event);
         }
         else {
-            session_process_event(fscord->session, &event);
+            login_process_event(fscord, &event);
         }
     }
 
-    if (fscord->is_login) {
-        login_draw(fscord);
+    connection_status = server_connection_get_status();
+    if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
+        session_draw(fscord->session);
     }
     else {
-        session_draw(fscord->session);
+        login_draw(fscord);
     }
 
 #if 0
@@ -85,15 +96,16 @@ fscord_create(void *memory, size_t memory_size)
         return 0;
     }
 
+
     fscord->font = asset_manager_load_font();
     fscord->sound_user_connected = asset_manager_load_sound(0);
     fscord->sound_user_disconnected = asset_manager_load_sound(1);
 
     os_net_secure_streams_init(arena, 1);
-    fscord->server_pub_rsa = rsa_create_via_file(arena, "./server_pubkey.pem", true);
+    server_connection_create(arena, fscord);
 
     fscord->login = login_create(arena);
-    fscord->is_login = true;
+    fscord->session = session_create(arena, fscord);
 
     return fscord;
 }

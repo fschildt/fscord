@@ -22,9 +22,11 @@ typedef struct {
 
 
 String32 *string32_create_from_ascii(MemArena *arena, char *ascii);
+String32 *string32_create_from_string32(MemArena *arena, String32 *src);
 String32 *string32_create_from_string32_with_len(MemArena *arena, String32 *src, size_t len);
 String32 *string32_create_from_string32_buffer(MemArena *arena, String32Buffer *buffer);
 String32 *string32_create_from_string32_buffer_with_len(MemArena *arena, String32Buffer *buffer, size_t len);
+String32 *string32_create_from_u32_array(MemArena *arena, u32 *buffer, size_t len);
 
 b32       string32_equal(String32 *str1, String32 *str2);
 void      string32_print(String32 *str);
