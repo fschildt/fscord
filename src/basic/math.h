@@ -3,23 +3,20 @@
 
 #include <basic/basic.h>
 
-typedef union V2F32 V2F32;
-union V2F32 {
+typedef union V2F32 {
     struct {f32 x; f32 y;};
     struct {f32 w; f32 h;};
-};
+} V2F32;
 
-typedef union V3F32 V3F32;
-union V3F32 {
+typedef union V3F32 {
     struct {f32 x; f32 y; f32 z;};
     struct {f32 r; f32 g; f32 b;};
-};
+} V3F32;
 
-typedef union V4F32 V4F32;
-union V4F32 {
+typedef union V4F32 {
     struct {f32 x; f32 y; f32 z; f32 w;};
     struct {f32 r; f32 g; f32 b; f32 a;};
-};
+} V4F32;
 
 typedef struct {
     f32 x0;
