@@ -105,6 +105,7 @@ OSNetStream* os_net_stream_accept(OSNetStream *listener);
 OSNetStream* os_net_stream_connect(char *address, u16 port);
 b32          os_net_stream_send(OSNetStream *stream, void *buffer, size_t size);
 b32          os_net_stream_recv(OSNetStream *stream, void *buffer, size_t size);
+int          os_net_stream_get_fd(OSNetStream *stream);
 void         os_net_stream_close(OSNetStream *stream);
 
 
@@ -122,6 +123,7 @@ OSNetSecureStream* os_net_secure_stream_connect(char *address, u16 port, EVP_PKE
 OSNetSecureStreamStatus os_net_secure_stream_get_status(OSNetSecureStream *stream);
 b32                os_net_secure_stream_send(OSNetSecureStream *stream, void *buffer, size_t size);
 b32                os_net_secure_stream_recv(OSNetSecureStream *stream, void *buffer, size_t size);
+int                os_net_secure_stream_get_fd(OSNetSecureStream *stream);
 void               os_net_secure_stream_close(OSNetSecureStream *stream);
 
 

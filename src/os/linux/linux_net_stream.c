@@ -92,6 +92,12 @@ os_net_stream_recv(OSNetStream *stream, void *buffer, size_t size)
     return true;
 }
 
+int
+os_net_stream_get_fd(OSNetStream *stream)
+{
+    return stream->fd;
+}
+
 void
 os_net_stream_close(OSNetStream *stream)
 {

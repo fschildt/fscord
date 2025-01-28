@@ -154,6 +154,11 @@ os_net_secure_stream_send(OSNetSecureStream *secure_stream, void *buff, size_t s
     return true;
 }
 
+int
+os_net_secure_stream_get_fd(OSNetSecureStream *secure_stream)
+{
+    return os_net_stream_get_fd(secure_stream->stream);
+}
 
 void
 os_net_secure_stream_close(OSNetSecureStream *secure_stream)
