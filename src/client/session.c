@@ -43,14 +43,14 @@ session_draw_chat_message(ChatMessage *message, V2F32 pos)
     string32_buffer_append_string32_buffer(sender_name_buff, message->sender_name);
     string32_buffer_append_ascii_cstr(sender_name_buff, ">");
 
-    String32 *sender_name = string32_create_from_string32_buffer(trans_arena, sender_name_buff);
+    String32 *sender_name = string32_buffer_to_string32(trans_arena, sender_name_buff);
     draw_string32(screen, pos, sender_name, font);
     str_width = font_string32_width(font, sender_name);
     pos.x += str_width + dx;
 
 
     // draw content
-    String32 *content = string32_create_from_string32_buffer(trans_arena, message->content);
+    String32 *content = string32_buffer_to_string32(trans_arena, message->content);
     draw_string32(screen, pos, content, font);
 }
 
@@ -111,7 +111,7 @@ session_draw_prompt(Session *session, RectF32 rect)
     f32 xmargin = border_size * 4;
     f32 ymargin = border_size * 4;
     V2F32 pos = v2f32(rect.x0 + xmargin, rect.y0 + ymargin);
-    String32 *prompt_str = string32_create_from_string32_buffer(trans_arena, session->prompt);
+    String32 *prompt_str = string32_buffer_to_string32(trans_arena, session->prompt);
     draw_string32(screen, pos, prompt_str, font);
 
 
@@ -154,7 +154,7 @@ session_draw_users(Session *session, RectF32 rect)
         size_t name_len_desired = user->name->len;
         size_t name_len_avail = font_string32_len_via_width(font, width_remain);
         size_t name_len = name_len_desired <= name_len_avail ? name_len_desired : name_len_avail;
-        String32 *username = string32_create_from_string32_buffer_with_len(trans_arena, user->name, name_len);
+        String32 *username = string32_buffer_to_string32_with_len(trans_arena, user->name, name_len);
         draw_string32(screen, pos, username, font);
         pos.y -= dy;
     }
@@ -259,7 +259,7 @@ session_process_event(Session *session, OSEvent *event)
     case OS_EVENT_KEY_PRESS: {
         u32 codepoint = event->key_press.code;
         if (codepoint == '\r') {
-            String32 *trans_prompt = string32_create_from_string32_buffer(trans_arena, session->prompt);
+            String32 *trans_prompt = string32_buffer_to_string32(trans_arena, session->prompt);
             c2s_chat_message(trans_prompt);
             string32_buffer_reset(session->prompt);
             session->prompt_cursor = 0;

@@ -42,8 +42,8 @@ login_draw(Fscord *fscord)
     // Todo: make a proper layout
     Font *font = fscord->font;
 
-    String32 *trans_servername = string32_create_from_string32_buffer(trans_arena, login->servername);
-    String32 *trans_username = string32_create_from_string32_buffer(trans_arena, login->username);
+    String32 *trans_servername = string32_buffer_to_string32(trans_arena, login->servername);
+    String32 *trans_username = string32_buffer_to_string32(trans_arena, login->username);
     draw_string32(offscreen, v2f32(0, 0), trans_servername, font);
     draw_string32(offscreen, v2f32(0, font->y_advance), trans_username, font);
 }
@@ -52,9 +52,9 @@ login_draw(Fscord *fscord)
 internal_fn b32
 parse_servername(String32Buffer *servername, char *address, size_t address_size, u16 *port)
 {
-    u32 *p0 = servername->p;
-    u32 *p1 = servername->p;
-    u32 *pmax = servername->p + servername->len - 1;
+    u32 *p0 = servername->codepoints;
+    u32 *p1 = servername->codepoints;
+    u32 *pmax = servername->codepoints + servername->len - 1;
 
 
     // address

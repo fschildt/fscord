@@ -131,7 +131,7 @@ void draw_string32(OSOffscreenBuffer *screen, V2F32 pos, String32 *str, Font *fo
     f32 glyph_y = pos.y + font->baseline;
 
     for (int i = 0; i < str->len; i++) {
-        u32 codepoint = str->p[i];
+        u32 codepoint = str->codepoints[i];
         Glyph *glyph = font_get_glyph(font, codepoint);
 
         if (codepoint != ' ') {

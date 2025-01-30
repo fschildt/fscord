@@ -30,8 +30,8 @@ b32
 string32_buffer_del_left(String32Buffer *buffer)
 {
     if (buffer->cursor > 0){
-        u32 *dest = &buffer->p[buffer->cursor - 1];
-        u32 *src  = &buffer->p[buffer->cursor];
+        u32 *dest = &buffer->codepoints[buffer->cursor - 1];
+        u32 *src  = &buffer->codepoints[buffer->cursor];
         size_t move_size = (buffer->len - buffer->cursor) * sizeof(u32);
         memmove(dest, src, move_size);
 
@@ -49,8 +49,8 @@ b32
 string32_buffer_del_right(String32Buffer *buffer)
 {
     if (buffer->cursor < buffer->len) {
-        u32 *dest = &buffer->p[buffer->cursor];
-        u32 *src  = &buffer->p[buffer->cursor + 1];
+        u32 *dest = &buffer->codepoints[buffer->cursor];
+        u32 *src  = &buffer->codepoints[buffer->cursor + 1];
         size_t move_size = (buffer->len - buffer->cursor) * sizeof(u32);
         memmove(dest, src, move_size);
 
@@ -69,12 +69,12 @@ string32_buffer_insert(String32Buffer *buffer, u32 codepoint)
     if (buffer->len < buffer->max_len &&
         buffer->cursor <= buffer->len)
     {
-        u32 *dest = &buffer->p[buffer->cursor + 1];
-        u32 *src  = &buffer->p[buffer->cursor];
+        u32 *dest = &buffer->codepoints[buffer->cursor + 1];
+        u32 *src  = &buffer->codepoints[buffer->cursor];
         size_t move_size = (buffer->len - buffer->cursor) * sizeof(u32);
         memmove(dest, src, move_size);
 
-        buffer->p[buffer->cursor] = codepoint;
+        buffer->codepoints[buffer->cursor] = codepoint;
         buffer->len += 1;
         buffer->cursor += 1;
 
@@ -111,8 +111,8 @@ string32_buffer_append_string32_buffer(String32Buffer *buffer, String32Buffer *s
 {
     size_t len_avail = buffer->max_len - buffer->len;
     size_t copy_count = len_avail >= src_buffer->len ? src_buffer->len : len_avail;
-    u32 *dest = buffer->p + buffer->len;
-    u32 *src = src_buffer->p;
+    u32 *dest = buffer->codepoints + buffer->len;
+    u32 *src = src_buffer->codepoints;
     for (size_t i = 0; i < copy_count; i++) {
         *dest++ = *src++;
     }
@@ -125,8 +125,8 @@ string32_buffer_append_string32(String32Buffer *buffer, String32 *str)
 {
     size_t len_avail = buffer->max_len - buffer->len;
     size_t copy_count = len_avail >= str->len ? str->len : len_avail;
-    u32 *dest = buffer->p + buffer->len;
-    u32 *src = str->p;
+    u32 *dest = buffer->codepoints + buffer->len;
+    u32 *src = str->codepoints;
     for (size_t i = 0; i < copy_count; i++) {
         *dest++ = *src++;
     }
@@ -142,7 +142,7 @@ string32_buffer_append_ascii_cstr(String32Buffer *buffer, char *ascii)
             break;
         }
 
-        buffer->p[buffer->len] = *ascii;
+        buffer->codepoints[buffer->len] = *ascii;
         buffer->len += 1;
         ascii++;
     }
@@ -171,7 +171,7 @@ b32 string32_buffer_equal_string32(String32Buffer *buffer, String32 *str)
         return false;
     }
     for (size_t i = 0; i < buffer->len; i++) {
-        if (buffer->p[i] != str->p[i]) {
+        if (buffer->codepoints[i] != str->codepoints[i]) {
             return false;
         }
     }
@@ -179,11 +179,37 @@ b32 string32_buffer_equal_string32(String32Buffer *buffer, String32 *str)
 }
 
 
+String32 *
+string32_buffer_to_string32_with_len(MemArena *arena, String32Buffer *buffer, size_t len)
+{
+    size_t push_size = sizeof(String32) + len * sizeof(u32);
+    String32 *result = mem_arena_push(arena, push_size);
+
+    memcpy(result->codepoints, buffer->codepoints, len);
+    result->len = len;
+
+    return result;
+}
+
+
+String32 *
+string32_buffer_to_string32(MemArena *arena, String32Buffer *buffer)
+{
+    size_t push_size = sizeof(String32) + buffer->len * sizeof(u32);
+    String32 *result = mem_arena_push(arena, push_size);
+
+    memcpy(result->codepoints, buffer->codepoints, buffer->len * sizeof(u32));
+    result->len = buffer->len;
+
+    return result;
+}
+
+
 void
 string32_buffer_print(String32Buffer *buffer)
 {
     for (size_t i = 0; i < buffer->len; i++) {
-        putchar(buffer->p[i]);
+        putchar(buffer->codepoints[i]);
     }
 }
 
@@ -199,16 +225,11 @@ string32_buffer_reset(String32Buffer *buffer)
 String32Buffer *
 string32_buffer_create(MemArena *arena, size_t max_len)
 {
-    String32Buffer *buffer = mem_arena_push(arena, sizeof(String32Buffer));
+    size_t push_size = sizeof(String32Buffer) + max_len * sizeof(u32);
+    String32Buffer *buffer = mem_arena_push(arena, push_size);
 
-    size_t alloc_count = max_len;
-    if (alloc_count > 0) {
-        alloc_count -= 1;
-    }
-    mem_arena_push(arena, alloc_count * sizeof(u32));
-
-    buffer->len = 0;
     buffer->cursor = 0;
+    buffer->len = 0;
     buffer->max_len = max_len;
 
     return buffer;
@@ -219,20 +240,18 @@ void
 string32_print(String32 *str)
 {
     for (size_t i = 0; i < str->len; i++) {
-        putchar(str->p[i]);
+        putchar(str->codepoints[i]);
     }
 }
 
 
 b32
-string32_equal(String32 *str1, String32 *str2)
-{
-    if (str1->len != str2->len) {
+string32_equal(String32 *str1, String32 *str2) { if (str1->len != str2->len) {
         return false;
     }
 
     for (size_t i = 0; i < str1->len; i++) {
-        if (str1->p[i] != str2->p[i]) {
+        if (str1->codepoints[i] != str2->codepoints[i]) {
             return false;
         }
     }
@@ -241,65 +260,32 @@ string32_equal(String32 *str1, String32 *str2)
 }
 
 
-internal_fn void
-string32_push_extra(MemArena *arena, size_t total_len)
-{
-    size_t extra_len = total_len > 1 ? total_len-1 : 0;
-    if (extra_len) {
-        mem_arena_push(arena, extra_len * sizeof(u32));
-    }
-}
-
-
 String32 *
 string32_create_from_u32_array(MemArena *arena, u32 *buffer, size_t len)
 {
-    String32 *str = mem_arena_push(arena, sizeof(String32));
-    string32_push_extra(arena, len);
+    size_t push_size = sizeof(String32) + len * sizeof(u32);
+    String32 *result = mem_arena_push(arena, sizeof(String32));
 
-    memcpy(str->p, buffer, len);
-    str->len = len;
+    memcpy(result->codepoints, buffer, len);
+    result->len = len;
 
-    return str;
+    return result;
 }
 
-
-String32 *
-string32_create_from_string32_buffer_with_len(MemArena *arena, String32Buffer *buffer, size_t len)
-{
-    String32 *str = mem_arena_push(arena, sizeof(String32));
-    string32_push_extra(arena, len);
-
-    memcpy(str->p, buffer->p, len);
-    str->len = len;
-
-    return str;
-}
-
-
-String32 *
-string32_create_from_string32_buffer(MemArena *arena, String32Buffer *buffer)
-{
-    String32 *str = mem_arena_push(arena, sizeof(String32));
-    string32_push_extra(arena, buffer->len);
-
-    memcpy(str->p, buffer->p, buffer->len * sizeof(u32));
-    str->len = buffer->len;
-
-    return str;
-}
 
 
 String32 *
 string32_create_from_string32(MemArena *arena, String32 *src)
 {
-    String32 *str = mem_arena_push(arena, sizeof(String32));
-    string32_push_extra(arena, src->len);
+    size_t push_size = sizeof(String32) + src->len * sizeof(u32);
+    String32 *result = mem_arena_push(arena, push_size);
+
     for (size_t i = 0; i < src->len; i++) {
-        str->p[i] = src->p[i];
+        result->codepoints[i] = src->codepoints[i];
     }
-    str->len = src->len;
-    return str;
+    result->len = src->len;
+
+    return result;
 }
 
 
@@ -308,15 +294,15 @@ string32_create_from_ascii(MemArena *arena, char *ascii)
 {
     size_t len = strlen(ascii);
 
-    String32 *str32 = mem_arena_push(arena, sizeof(String32));
-    string32_push_extra(arena, len);
+    size_t push_size = sizeof(String32) + strlen(ascii) * sizeof(u32);
+    String32 *result = mem_arena_push(arena, push_size);
 
-    u32 *dest = str32->p;
+    u32 *dest = result->codepoints;
     while (*ascii) {
         *dest++ = *ascii++;
     }
-    str32->len = len;
+    result->len = len;
 
-    return str32;
+    return result;
 }
 
