@@ -33,6 +33,7 @@ void      string32_print(String32 *str);
 
 
 String32Buffer* string32_buffer_create(MemArena *arena, size_t max_len);
+void            string32_buffer_init_in_place(String32Buffer *buffer, size_t max_len);
 
 String32 *string32_buffer_to_string32(MemArena *arena, String32Buffer *buffer);
 String32 *string32_buffer_to_string32_with_len(MemArena *arena, String32Buffer *buffer, size_t len);

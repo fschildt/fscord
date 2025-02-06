@@ -45,19 +45,17 @@ typedef enum {
     OS_KEYCODE_DOWN,
 } OSKeySpecial;
 
-typedef struct OSKeyPress OSKeyPress;
-struct OSKeyPress {
+typedef struct OSKeyPress {
     b32 is_unicode; // else it's "special", see OSKeySpecial
     u32 code;   // unicode character or some other keyboard keys
-};
-typedef struct OSKeyRelease OSKeyRelease;
-struct OSKeyRelease {
+} OSKeyPress;
+
+typedef struct OSKeyRelease {
     b32 is_special;
     u32 code;   // unicode character or some other keyboard keys
-};
+} OSKeyRelease;
 
-typedef struct OSEvent OSEvent;
-struct OSEvent {
+typedef struct OSEvent {
     OSEventType type;
     union {
         OSKeyPress key_press;
@@ -69,7 +67,7 @@ struct OSEvent {
             i32 height;
         };
     };
-};
+} OSEvent;
 
 
 
@@ -98,15 +96,19 @@ void               os_window_swap_buffers(OSWindow *window, OSOffscreenBuffer *o
 
 
 
-typedef struct OSNetStream OSNetStream;
-void         os_net_streams_init(MemArena *arena, size_t max_stream_count);
-OSNetStream* os_net_stream_listen(u16 port);
-OSNetStream* os_net_stream_accept(OSNetStream *listener);
-OSNetStream* os_net_stream_connect(char *address, u16 port);
-b32          os_net_stream_send(OSNetStream *stream, void *buffer, size_t size);
-b32          os_net_stream_recv(OSNetStream *stream, void *buffer, size_t size);
-int          os_net_stream_get_fd(OSNetStream *stream);
-void         os_net_stream_close(OSNetStream *stream);
+#define OS_NET_STREAM_ID_INVALID U32_MAX
+
+void  os_net_streams_init(MemArena *arena, size_t max_count);
+
+u32  os_net_stream_listen(u16 port);
+u32  os_net_stream_accept(u32 listener_id);
+u32  os_net_stream_connect(char *address, u16 port);
+void os_net_stream_close(u32 id);
+
+b32  os_net_stream_send(u32 id, void *buffer, size_t size);
+b32  os_net_stream_recv(u32 id, void *buffer, size_t size);
+int  os_net_stream_get_fd(u32 id);
+
 
 
 typedef enum {
@@ -115,16 +117,19 @@ typedef enum {
     OS_NET_SECURE_STREAM_HANDSHAKING,
 } OSNetSecureStreamStatus;
 
-typedef struct OSNetSecureStream OSNetSecureStream;
-void               os_net_secure_streams_init(MemArena *arena, size_t max_stream_count);
-OSNetSecureStream* os_net_secure_stream_listen(u16 port, EVP_PKEY *pubkey);
-OSNetSecureStream* os_net_secure_stream_accept(OSNetSecureStream *listener);
-OSNetSecureStream* os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_pub_rsa);
-OSNetSecureStreamStatus os_net_secure_stream_get_status(OSNetSecureStream *stream);
-b32                os_net_secure_stream_send(OSNetSecureStream *stream, void *buffer, size_t size);
-b32                os_net_secure_stream_recv(OSNetSecureStream *stream, void *buffer, size_t size);
-int                os_net_secure_stream_get_fd(OSNetSecureStream *stream);
-void               os_net_secure_stream_close(OSNetSecureStream *stream);
+#define OS_NET_SECURE_STREAM_ID_INVALID U32_MAX
+
+void os_net_secure_streams_init(MemArena *arena, size_t max_count);
+
+u32  os_net_secure_stream_listen(u16 port, EVP_PKEY *server_rsa_pri);
+u32  os_net_secure_stream_accept(u32 listener_id);
+u32  os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub);
+void os_net_secure_stream_close(u32 id);
+
+b32  os_net_secure_stream_send(u32 id, void *buffer, size_t size);
+i64  os_net_secure_stream_recv(u32 id, void *buffer, size_t size);
+int  os_net_secure_stream_get_fd(u32 id);
+OSNetSecureStreamStatus os_net_secure_stream_get_status(u32 id);
 
 
 

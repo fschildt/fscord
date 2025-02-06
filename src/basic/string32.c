@@ -221,6 +221,14 @@ string32_buffer_reset(String32Buffer *buffer)
     buffer->cursor = 0;
 }
 
+void
+string32_buffer_init_in_place(String32Buffer *buffer, size_t max_len)
+{
+    buffer->cursor = 0;
+    buffer->len = 0;
+    buffer->max_len = max_len;
+}
+
 
 String32Buffer *
 string32_buffer_create(MemArena *arena, size_t max_len)

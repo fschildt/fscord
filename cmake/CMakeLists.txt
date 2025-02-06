@@ -28,7 +28,6 @@ target_sources(fscord PUBLIC
     ${FSCORD_SRC_DIR}/client/server_connection.c
     ${FSCORD_SRC_DIR}/crypto/aes_gcm.c
     ${FSCORD_SRC_DIR}/crypto/rsa.c
-    ${FSCORD_SRC_DIR}/messages/messages.c
     ${FSCORD_SRC_DIR}/os/linux/linux_window.c
     ${FSCORD_SRC_DIR}/os/linux/linux_sound.c
     ${FSCORD_SRC_DIR}/os/linux/linux_library.c
@@ -47,6 +46,7 @@ add_executable(fscord_server)
 set_property(TARGET fscord_server PROPERTY C_STANDARD 99)
 target_sources(fscord_server PUBLIC
     ${FSCORD_SRC_DIR}/basic/mem_arena.c
+    ${FSCORD_SRC_DIR}/basic/string32.c
     ${FSCORD_SRC_DIR}/os/linux/linux_memory.c
     ${FSCORD_SRC_DIR}/os/linux/linux_net_stream.c
     ${FSCORD_SRC_DIR}/os/linux/linux_net_secure_stream.c

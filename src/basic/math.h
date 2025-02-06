@@ -41,4 +41,5 @@ RectF32 rectf32(f32 x0, f32 y0, f32 x1, f32 y1);
 b32     rectf32_contains_v2f32(RectF32 rect, V2F32 pos);
 
 
+
 #endif // MATH_H

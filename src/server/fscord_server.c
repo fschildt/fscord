@@ -27,26 +27,28 @@ typedef struct {
 internal_fn b32
 parse_args(ParsedArgs *args, int argc, char **argv)
 {
-    u16 port;
-
-    if (argc != 5) {
+    if (argc != 3) {
         goto format_err;
     }
+
 
     if (strcmp(argv[1], "-port") != 0) {
         goto format_err;
     }
-    port = atoi(argv[2]);
+
+    u16 port = atoi(argv[2]);
     if (port == 0) {
         printf("port number is invalid\n");
         return false;
     }
 
+
     args->port = port;
     return true;
 
+
 format_err:
-    printf("invocation format error\n");
+    printf("invocation format error, execpting \"-port <portnum>\"\n");
     return false;
 }
 
@@ -56,53 +58,42 @@ main(int argc, char **argv)
 {
     MemArena arena;
     OSMemory memory;
-    if (!os_memory_allocate(&memory, MEBIBYTES(1))) {
+    if (!os_memory_allocate(&memory, MEBIBYTES(2))) {
         return EXIT_FAILURE;
     }
     mem_arena_init(&arena, memory.p, memory.size);
 
 
-    printf("parsing args...\n");
     ParsedArgs args;
     if (!parse_args(&args, argc, argv)) {
         return EXIT_FAILURE;
     }
 
 
-    printf("create rsa via file...\n");
+    os_net_streams_init(&arena, MESSAGES_MAX_USER_COUNT + 1);
+    os_net_secure_streams_init(&arena, MESSAGES_MAX_USER_COUNT + 1);
+
+
     EVP_PKEY *server_rsa_pri = rsa_create_via_file(&arena, "./server_rsa_pri.pem", false);
 
-    printf("create secure stream listener...\n");
-    OSNetSecureStream *listener = os_net_secure_stream_listen(args.port, server_rsa_pri);
-    if (!listener) {
+    u32 listener = os_net_secure_stream_listen(args.port, server_rsa_pri);
+    if (listener == OS_NET_SECURE_STREAM_ID_INVALID) {
         return EXIT_FAILURE;
     }
 
-    printf("create client connections...\n");
+
     if (!client_connections_create(&arena)) {
         return EXIT_FAILURE;
     }
 
 
-    printf("looping for accept...\n");
     for (;;) {
-        debug_printf("accepting connection...\n");
-        OSNetSecureStream *client_stream = os_net_secure_stream_accept(listener);
-        if (!client_stream) {
-            printf("error: not accepted a new client secure stream\n");
-            continue;
+        u32 secure_stream_id = os_net_secure_stream_accept(listener);
+        if (secure_stream_id != OS_NET_SECURE_STREAM_ID_INVALID) {
+            client_connection_add(secure_stream_id);
         }
-
-        i16 client_connection = client_connection_alloc_and_init(client_stream);
-        if (client_connection < 0) {
-            os_net_secure_stream_close(client_stream);
-            continue;
-        }
-
-
-
-        printf("accepted a connection...\n");
     }
 
-    return EXIT_FAILURE;
+
+    return EXIT_SUCCESS;
 }

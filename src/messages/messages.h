@@ -12,11 +12,11 @@
 #define MESSAGES_MAX_USER_COUNT 128
 #define MESSAGES_MAX_USERNAME_LEN 32
 #define MESSAGES_MAX_MESSAGE_LEN 1024
-#define MESSAGES_MAX_PACKAGE_SIZE 1408 // 1408 fits well in ethernet frames // Todo: We shouldn't worry about this very much! Change the api!
+#define MESSAGES_MAX_PACKAGE_SIZE 1408
 
 typedef struct {
-    u32 type;
     u32 size;
+    u32 type;
 } MessageHeader;
 
 enum {
@@ -69,14 +69,6 @@ typedef struct {
 } S2C_ChatMessage;
 
 
-void messages_init(MemArena *arena, OSNetSecureStream *secure_stream);
-
-void c2s_login(String32 *username, String32 *password);
-void c2s_chat_message(String32 *content);
-
-void s2c_login(u32 login_result);
-void s2c_user_update(String32 *username, u32 online_status);
-void s2c_chat_message(String32 *username, String32 *content);
 
 
 #endif // FSCORD_MESSAGES_H

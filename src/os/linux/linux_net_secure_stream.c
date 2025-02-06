@@ -10,316 +10,464 @@
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
 
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 
 // Todo: bulletproof all cases
+// Todo: change OS_NET_STREAM_ID_INVALID to 0 so it's easier to write and check?
+// Todo: have b32 or flag with 'has_error' so user code can close them
 
 
 typedef struct {
     AesGcmKey aes_key_client_encrypt; // also means ..._server_decrypt
     AesGcmKey aes_key_client_decrypt; // also means ..._server_encrypt
+    AesGcmIv  aes_iv;
     u8 client_random[512];
-} HandshakeRequest;
+} CM_Handshake;
 
 typedef struct {
     u8 client_random[512];
-} HandshakeResponse;
+} SM_Handshake;
 
 
-struct OSNetSecureStream {
+typedef struct {
+    int fd;
     OSNetSecureStreamStatus status;
 
-    EVP_PKEY *rsa_key;
-    AesGcmKey aes_key_encrypt;
-    AesGcmKey aes_key_decrypt;
-    AesGcmIv aes_iv; // only one direction is initialized and advanced per stream
+    EVP_PKEY *rsa_key; // Todo: nani? ...
 
-    MemArena arena;
-    u8 arena_mem[1408];
+    b32          recv_aes_header_initialized;
+    size_t       recv_aes_payload_size_processed;
+    AesGcmHeader recv_aes_decrypt_header; // received with each message
+    AesGcmKey    recv_aes_decrypt_key; // established during handshake
+    AesGcmIv     recv_aes_decrypt_iv;  // established during handshake; advanced for each message
+    u8           recv_buff[1408];
 
-    OSNetStream *stream; // Sadly this will go to another memory page, but I'll accept that.
-};
-
-typedef struct {
-    size_t max_secure_stream_count;
-    void *secure_streams;
-    size_t free_secure_stream_count;
-    OSNetSecureStream **free_secure_streams;
-} OSNetSecureStreamsData;
+    AesGcmKey    send_aes_encrypt_key;
+    AesGcmIv     send_aes_encrypt_iv;
+    size_t       send_buff_size;
+    u8           send_buff[1408];
+} OSNetSecureStream;
 
 
-internal_var OSNetSecureStreamsData s_data;
+internal_var u32 s_max_secure_stream_count;
+internal_var OSNetSecureStream *s_secure_streams;
+
+internal_var u32 s_free_id_count;
+internal_var u32 *s_free_ids;
 
 
-void
-os_net_secure_streams_init(MemArena *arena, size_t max_stream_count)
-{
-    s_data.max_secure_stream_count = max_stream_count;
-    s_data.secure_streams = mem_arena_push(arena, max_stream_count * sizeof(OSNetSecureStream));
-    memset(s_data.secure_streams, 0, max_stream_count*sizeof(OSNetSecureStream));
-    for (size_t i = 0; i < max_stream_count; i++) {
-        OSNetSecureStream *secure_stream = &s_data.secure_streams[i];
-        secure_stream->status = OS_NET_SECURE_STREAM_DISCONNECTED;
-        mem_arena_init(&secure_stream->arena, secure_stream->arena_mem, sizeof(secure_stream->arena_mem));
-    }
-
-    s_data.free_secure_stream_count = max_stream_count;
-    s_data.free_secure_streams = mem_arena_push(arena, max_stream_count * sizeof(OSNetSecureStream*));
-    for (size_t i = 0; i < max_stream_count; i++) {
-        s_data.free_secure_streams[i] = &s_data.secure_streams[i];
-    }
-
-    os_net_streams_init(arena, max_stream_count);
-}
 
 OSNetSecureStreamStatus
-os_net_secure_stream_get_status(OSNetSecureStream *stream)
+os_net_secure_stream_get_status(u32 id)
 {
-    return stream->status;
+    return s_secure_streams[id].status;
 }
 
 
-internal_fn void
-os_net_secure_stream_free(OSNetSecureStream *secure_stream)
+i64
+os_net_secure_stream_recv(u32 id, void *buff, size_t size)
 {
-    s_data.free_secure_streams[s_data.free_secure_stream_count++] = secure_stream;
-}
-
-internal_fn OSNetSecureStream *
-os_net_secure_stream_alloc()
-{
-    if (unlikely(s_data.free_secure_stream_count == 0)) {
+    OSNetSecureStream *secure_stream = &s_secure_streams[id];
+    if (secure_stream->status == OS_NET_SECURE_STREAM_DISCONNECTED) {
         return 0;
     }
 
-    OSNetSecureStream *secure_stream = s_data.free_secure_streams[--s_data.free_secure_stream_count];
-    return secure_stream;
+    i64 size_processed = 0;
+    i64 size_to_recv;
+    i64 recvd_size;
+    void *src;
+    void *dest;
+
+    while (size) {
+        // 1) recv aes header
+        if (!secure_stream->recv_aes_header_initialized) {
+            size_to_recv = sizeof(AesGcmHeader);
+
+            recvd_size = recv(secure_stream->fd,
+                              &secure_stream->recv_aes_decrypt_header,
+                              sizeof(secure_stream->recv_aes_decrypt_header),
+                              MSG_PEEK);
+            if (recvd_size < size_to_recv) {
+                // Todo: error handling?
+                return 0;
+            }
+
+            recvd_size = recv(secure_stream->fd,
+                              &secure_stream->recv_aes_decrypt_header,
+                              sizeof(secure_stream->recv_aes_decrypt_header),
+                              MSG_WAITALL);
+            if (recvd_size < size_to_recv) {
+                // Todo: error handling?
+                return 0;
+            }
+
+            secure_stream->recv_aes_header_initialized = true;
+        }
+
+
+        // 2) recv aes payload
+        size_t payload_remain = secure_stream->recv_aes_decrypt_header.payload_size
+                              - secure_stream->recv_aes_payload_size_processed;
+        size_to_recv = MIN(size, payload_remain);
+        size_to_recv = MIN(size_to_recv, ARRAY_COUNT(secure_stream->recv_buff));
+
+        dest = secure_stream->recv_buff;
+
+        recvd_size = os_net_secure_stream_recv(secure_stream->fd, dest, size_to_recv);
+        if (recvd_size < 0) {
+            // Todo: error handling?
+            return 0;
+        }
+
+
+        // 3) decrypt to buff
+        src  = secure_stream->recv_buff;
+        dest = buff + size_processed;
+        b32 decrypted = aes_gcm_decrypt(&secure_stream->recv_aes_decrypt_key,
+                                        &secure_stream->recv_aes_decrypt_iv,
+                                        dest, src, recvd_size,
+                                        secure_stream->recv_aes_decrypt_header.tag,
+                                        secure_stream->recv_aes_decrypt_header.tag_len);
+        if (!decrypted) {
+            // Todo: error handling?
+            return false;
+        }
+
+
+        // 4) clean up
+        secure_stream->recv_aes_payload_size_processed += recvd_size;
+        if (secure_stream->recv_aes_payload_size_processed == secure_stream->recv_aes_decrypt_header.payload_size) {
+            secure_stream->recv_aes_payload_size_processed = 0;
+            secure_stream->recv_aes_header_initialized = false;
+        }
+
+        size_processed += recvd_size;
+        size -= recvd_size;
+    }
+
+    return size_processed;
 }
 
-
 b32
-os_net_secure_stream_recv(OSNetSecureStream *secure_stream, void *buff, size_t size)
+os_net_secure_stream_send(u32 id, void *buff, size_t size)
 {
-    if (secure_stream->status == OS_NET_SECURE_STREAM_DISCONNECTED) {
-        return false;
-    }
-
-    AesGcmHeader header;
-    if (!os_net_stream_recv(secure_stream->stream, &header, sizeof(header))) {
-        return false;
-    }
-
-    void *ciphertext = mem_arena_push(&secure_stream->arena, size);
-    if (!os_net_stream_recv(secure_stream->stream, ciphertext, size)) {
-        mem_arena_reset(&secure_stream->arena);
-        return false;
-    }
-
-    b32 decrypted = aes_gcm_decrypt(&secure_stream->aes_key_decrypt,
-                                    &secure_stream->aes_iv,
-                                    buff, ciphertext, size,
-                                    header.tag, header.tag_len);
-    mem_arena_reset(&secure_stream->arena);
-
-    return decrypted;
-}
-
-b32
-os_net_secure_stream_send(OSNetSecureStream *secure_stream, void *buff, size_t size)
-{
+    OSNetSecureStream *secure_stream = &s_secure_streams[id];
     if (secure_stream->status != OS_NET_SECURE_STREAM_CONNECTED) {
         return false;
     }
 
-    AesGcmHeader *aes_header = mem_arena_push(&secure_stream->arena, sizeof(*aes_header));
-    void *ciphertext = mem_arena_push(&secure_stream->arena, size);
-    b32 encrypted = aes_gcm_encrypt(&secure_stream->aes_key_encrypt, &secure_stream->aes_iv,
-                                    ciphertext, buff, size,
-                                    aes_header->tag, aes_header->tag_len);
-    if (!encrypted) {
-        secure_stream->status = OS_NET_SECURE_STREAM_DISCONNECTED;
-        mem_arena_reset(&secure_stream->arena);
-        return false;
+
+    // Note: We're sending a new aes header every time, because the recipient
+    //       needs the tag to verify each part of the message
+
+    size_t size_processed = 0;
+    while (size_processed < size) {
+        AesGcmHeader *aes_header = (AesGcmHeader*)secure_stream->send_buff;
+
+        void *src = buff + size_processed;
+        void *payload = secure_stream->send_buff + sizeof(*aes_header);
+        i64 payload_size = MIN(size, ARRAY_COUNT(secure_stream->send_buff) - sizeof(*aes_header));
+
+        b32 encrypted = aes_gcm_encrypt(&secure_stream->send_aes_encrypt_key,
+                                        &secure_stream->send_aes_encrypt_iv,
+                                        payload, src, payload_size,
+                                        aes_header->tag, aes_header->tag_len);
+        if (!encrypted) {
+            return false;
+        }
+
+        size_t size_to_send = sizeof(*aes_header) + payload_size;
+        i64 sent_size = send(secure_stream->fd, secure_stream->send_buff, size, 0);
+        if (sent_size != size_to_send) {
+            return false;
+        }
+
+        size_processed += payload_size;
     }
 
-    b32 sent = os_net_stream_send(secure_stream->stream, buff, size);
-    if (!sent) {
-        secure_stream->status = OS_NET_SECURE_STREAM_DISCONNECTED;
-        mem_arena_reset(&secure_stream->arena);
-        return false;
-    }
-
-    mem_arena_reset(&secure_stream->arena);
     return true;
 }
 
 int
-os_net_secure_stream_get_fd(OSNetSecureStream *secure_stream)
+os_net_secure_stream_get_fd(u32 id)
 {
-    return os_net_stream_get_fd(secure_stream->stream);
+    OSNetSecureStream *secure_stream = &s_secure_streams[id];
+    return secure_stream->fd;
 }
+
+
+internal_fn void
+os_net_secure_stream_free(u32 id)
+{
+    s_free_ids[s_free_id_count] = id;
+    s_free_id_count += 1;
+}
+
+
+internal_fn u32
+os_net_secure_stream_alloc()
+{
+    assert(s_free_id_count > 0);
+    if (s_free_id_count == 0) {
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+
+    u32 id = s_free_ids[s_free_id_count-1];
+    s_free_id_count -= 1;
+
+    return id;
+}
+
 
 void
-os_net_secure_stream_close(OSNetSecureStream *secure_stream)
+os_net_secure_stream_close(u32 id)
 {
-    os_net_stream_close(secure_stream->stream);
-    secure_stream->status = OS_NET_SECURE_STREAM_DISCONNECTED;
+    OSNetSecureStream *secure_stream = &s_secure_streams[id];
+
+    close(secure_stream->fd);
+    memset(secure_stream, 0, sizeof(*secure_stream));
+
+    os_net_secure_stream_free(id);
 }
 
-OSNetSecureStream *
-os_net_secure_stream_listen(u16 port, EVP_PKEY *rsa_key_pri)
+u32
+os_net_secure_stream_listen(u16 port, EVP_PKEY *rsa_pri)
 {
-    OSNetSecureStream *secure_stream = os_net_secure_stream_alloc();
-    if (!secure_stream) {
-        return 0;
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == -1) {
+        perror("socket()");
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
-    secure_stream->status = OS_NET_SECURE_STREAM_DISCONNECTED;
-    secure_stream->rsa_key = rsa_key_pri;
-    secure_stream->stream = os_net_stream_listen(port);
-    if (!secure_stream->stream) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+
+    int enable_reuse = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable_reuse, sizeof(int)) < 0) {
+        perror("setsockopt(SO_REUSEADDR)");
+        close(fd);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
-    return secure_stream;
+
+    struct sockaddr_in local_addr;
+    local_addr.sin_family = AF_INET;
+    local_addr.sin_port = htons(port);
+    local_addr.sin_addr.s_addr = INADDR_ANY;
+    if (bind(fd, (struct sockaddr *)&local_addr, sizeof(local_addr)) < 0) {
+        perror("bind()");
+        close(fd);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+
+    int backlog = 128;
+    if (listen(fd, backlog) == -1) {
+        perror("listen()");
+        close(fd);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+
+
+    u32 id = os_net_secure_stream_alloc();
+
+    OSNetSecureStream *secure_stream = &s_secure_streams[id];
+    secure_stream->fd = fd;
+    secure_stream->status = OS_NET_SECURE_STREAM_CONNECTED;
+    secure_stream->rsa_key = rsa_pri;
+
+
+    return id;
 }
 
-OSNetSecureStream *
-os_net_secure_stream_accept(OSNetSecureStream *listener)
+
+u32
+os_net_secure_stream_accept(u32 listener_id)
 {
-    OSNetSecureStream *secure_stream = os_net_secure_stream_alloc();
-    if (!secure_stream) {
-        return 0;
-    }
-
-    secure_stream->stream = os_net_stream_accept(listener->stream);
-    if (!secure_stream->stream) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
-    }
+    OSNetSecureStream *listener = &s_secure_streams[listener_id];
 
 
-    u8 encrypted_req[sizeof(HandshakeRequest)];
-    if (!os_net_stream_recv(secure_stream->stream, encrypted_req, sizeof(encrypted_req))) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
-    }
-    HandshakeRequest req;
-    if (!rsa_decrypt(listener->rsa_key, &req, encrypted_req, sizeof(req))) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    // Todo: Do the connect/handshake in another thread to prevent stalling the program.
+    struct sockaddr_in addr;
+    socklen_t addr_size = sizeof(addr);
+
+    int fd = accept(listener->fd, (struct sockaddr*)&addr, &addr_size);
+    if (fd == -1) {
+        printf("accept() failed\n");
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
 
-    HandshakeResponse resp;
-    memcpy(resp.client_random, req.client_random, sizeof(req.client_random));
-    if (!os_net_stream_send(secure_stream->stream, &resp, sizeof(resp))) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    u32 secure_stream_id = os_net_secure_stream_alloc();
+    if (secure_stream_id == OS_NET_SECURE_STREAM_ID_INVALID) {
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+
+    OSNetSecureStream *secure_stream = &s_secure_streams[secure_stream_id];
+    secure_stream->fd = fd;
+    secure_stream->status = OS_NET_SECURE_STREAM_HANDSHAKING;
+
+
+    u8 encrypted_cm_handshake[sizeof(CM_Handshake)];
+    i64 recvd_size = recv(secure_stream->fd, encrypted_cm_handshake, sizeof(encrypted_cm_handshake), MSG_WAITALL);
+    if (recvd_size != sizeof(encrypted_cm_handshake)) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+
+    CM_Handshake cm_handshake;
+    if (!rsa_decrypt(listener->rsa_key, &cm_handshake, encrypted_cm_handshake, sizeof(encrypted_cm_handshake))) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+
+
+    SM_Handshake sm_handshake;
+    assert(sizeof(sm_handshake.client_random) == sizeof(cm_handshake.client_random));
+    memcpy(sm_handshake.client_random, cm_handshake.client_random, sizeof(cm_handshake.client_random));
+    i64 sent_size = send(secure_stream->fd, &sm_handshake, sizeof(sm_handshake), 0);
+    if (sent_size != sizeof(sm_handshake)) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
 
     secure_stream->status = OS_NET_SECURE_STREAM_CONNECTED;
     secure_stream->rsa_key = 0;
-    aes_gcm_key_copy(&secure_stream->aes_key_encrypt, &req.aes_key_client_decrypt);
-    aes_gcm_key_copy(&secure_stream->aes_key_decrypt, &req.aes_key_client_encrypt);
-    if (!aes_gcm_iv_init(&secure_stream->aes_iv)) {
-        os_net_secure_stream_free(secure_stream);
+    aes_gcm_key_copy(&secure_stream->send_aes_encrypt_key, &cm_handshake.aes_key_client_decrypt);
+    aes_gcm_key_copy(&secure_stream->recv_aes_decrypt_key, &cm_handshake.aes_key_client_encrypt);
+    // Todo: i kind of guessed that it's send_aes_encrypt_iv; verify it!
+    if (!aes_gcm_iv_init(&secure_stream->send_aes_encrypt_iv)) {
+        os_net_secure_stream_free(secure_stream_id);
         return 0;
     }
 
 
-    return secure_stream;
+    return secure_stream_id;
 }
 
-OSNetSecureStream *
-os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *rsa_server_pub)
+u32
+os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
 {
-    OSNetSecureStream *secure_stream = os_net_secure_stream_alloc();
+    // Todo: Do the connect/handshake in another thread to prevent stalling the program.
 
-    secure_stream->stream = os_net_stream_connect(address, port);
-    if (!secure_stream->stream) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == -1) {
+        printf("cant open socket\n");
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
-    secure_stream->rsa_key = rsa_server_pub;
-    if (!aes_gcm_key_init_random(&secure_stream->aes_key_encrypt)) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
-    }
-    if (!aes_gcm_key_init_random(&secure_stream->aes_key_decrypt)) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
-    }
-    if (!aes_gcm_iv_init(&secure_stream->aes_iv)) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    struct sockaddr_in target_addr;
+    memset(&target_addr, 0, sizeof(target_addr));
+    target_addr.sin_family = AF_INET;
+    target_addr.sin_port = htons(1338);
+    target_addr.sin_addr.s_addr = inet_addr(address);
+    if (connect(fd, (struct sockaddr*)&target_addr, sizeof(target_addr)) == -1) {
+        printf("connect failed\n");
+        close(fd);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
 
-    // Todo: Do the Handshake in another thread to prevent stalling the program.
-
-
-    secure_stream->stream = os_net_stream_connect(address, port);
-    if (!secure_stream->stream) {
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    u32 secure_stream_id = os_net_secure_stream_alloc();
+    if (secure_stream_id == OS_NET_SECURE_STREAM_ID_INVALID) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
+
+    OSNetSecureStream *secure_stream = &s_secure_streams[secure_stream_id];
+    secure_stream->fd = fd;
+    secure_stream->rsa_key = server_rsa_pub;
+
+    if (!aes_gcm_key_init_random(&secure_stream->recv_aes_decrypt_key)) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+    if (!aes_gcm_key_init_random(&secure_stream->send_aes_encrypt_key)) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+    if (!aes_gcm_iv_init(&secure_stream->send_aes_encrypt_iv)) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_SECURE_STREAM_ID_INVALID;
+    }
+
+
 
 
     /* Request */
 
-    HandshakeRequest *req = mem_arena_push(&secure_stream->arena, sizeof(*req));
-    aes_gcm_key_copy(&req->aes_key_client_encrypt, &secure_stream->aes_key_encrypt);
-    aes_gcm_key_copy(&req->aes_key_client_decrypt, &secure_stream->aes_key_decrypt);
-    if (RAND_bytes(req->client_random, sizeof(req->client_random)) != 1) {
-        mem_arena_reset(&secure_stream->arena);
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    CM_Handshake cm_handshake;
+    aes_gcm_key_copy(&cm_handshake.aes_key_client_encrypt, &secure_stream->send_aes_encrypt_key);
+    aes_gcm_key_copy(&cm_handshake.aes_key_client_decrypt, &secure_stream->recv_aes_decrypt_key);
+    if (RAND_bytes(cm_handshake.client_random, sizeof(cm_handshake.client_random)) != 1) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_STREAM_ID_INVALID;
     }
+
 
     // encrypt
-    void *encrypted_req = mem_arena_push(&secure_stream->arena, sizeof(*req));
-    if (!rsa_encrypt(rsa_server_pub, encrypted_req, req, sizeof(*req))) {
-        mem_arena_reset(&secure_stream->arena);
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    assert(ARRAY_COUNT(secure_stream->send_buff) >= sizeof(cm_handshake));
+
+    void *encrypted_req = secure_stream->send_buff;
+    if (!rsa_encrypt(server_rsa_pub, encrypted_req, &cm_handshake, sizeof(cm_handshake))) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_STREAM_ID_INVALID;
     }
 
+
     // send
-    if (!os_net_stream_send(secure_stream->stream, encrypted_req, sizeof(*req))) {
-        mem_arena_reset(&secure_stream->arena);
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    i64 sent_size = send(secure_stream->fd, encrypted_req, sizeof(cm_handshake), 0);
+    if (sent_size != sizeof(cm_handshake)) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_STREAM_ID_INVALID;
     }
 
 
     /* Response */
 
-    HandshakeResponse *resp = mem_arena_push(&secure_stream->arena, sizeof(*resp));
-    if (!os_net_stream_recv(secure_stream->stream, resp, sizeof(*resp))) {
-        mem_arena_reset(&secure_stream->arena);
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    SM_Handshake sm_handshake;
+    i64 recvd_size = recv(secure_stream->fd, &sm_handshake, sizeof(sm_handshake), 0);
+    if (recvd_size != sizeof(sm_handshake)) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_STREAM_ID_INVALID;
     }
 
     // verify response
-    b32 success = 1;
-    for (size_t i = 0; i < sizeof(req->client_random); i++) {
-        if (req->client_random[i] != resp->client_random[i]) {
-            success = 0;
-            // don't break here to prevent a timing attack? xd
-        }
-    }
-    if (!success) {
-        mem_arena_reset(&secure_stream->arena);
-        os_net_secure_stream_free(secure_stream);
-        return 0;
+    assert(sizeof(cm_handshake.client_random) == sizeof(sm_handshake.client_random));
+    if (memcmp(cm_handshake.client_random, sm_handshake.client_random, sizeof(cm_handshake.client_random)) != 0) {
+        close(fd);
+        os_net_secure_stream_free(secure_stream_id);
+        return OS_NET_STREAM_ID_INVALID;
     }
 
     secure_stream->status = OS_NET_SECURE_STREAM_CONNECTED;
-    secure_stream->rsa_key = rsa_server_pub;
-    return secure_stream;
+    secure_stream->rsa_key = server_rsa_pub;
+    return secure_stream_id;
+}
+
+void
+os_net_secure_streams_init(MemArena *arena, size_t max_count)
+{
+    s_max_secure_stream_count = max_count;
+    s_secure_streams = mem_arena_push(arena, max_count * sizeof(OSNetSecureStream));
+    memset(s_secure_streams, 0, max_count * sizeof(OSNetSecureStream));
+
+    s_free_id_count = max_count;
+    s_free_ids = mem_arena_push(arena, max_count * sizeof(u32));
+    for (size_t i = 0; i < max_count; i++) {
+        s_free_ids[i] = i;
+    }
 }
 

@@ -1,4 +1,4 @@
-#include "basic/basic.h"
+#include <basic/basic.h>
 #include <os/os.h>
 
 #include <sys/socket.h>
@@ -11,65 +11,46 @@
 #include <unistd.h>
 
 
-struct OSNetStream {
-    int fd;
-};
-
 typedef struct {
-    size_t free_stream_count;
-    size_t max_stream_count;
-    OSNetStream *streams; // other streams follow in memory
-    OSNetStream **free_streams;
-} OSNetStreamsData;
+    int fd;
+} OSNetStream;
 
 
-internal_var OSNetStreamsData s_data;
+internal_var u32 s_max_stream_count;
+internal_var OSNetStream *s_streams;
 
+internal_var u32 s_free_id_count;
+internal_var u32 *s_free_ids;
 
-size_t
-os_net_stream_get_size()
-{
-    return sizeof(OSNetStream);
-}
 
 
 internal_fn void
-os_net_stream_free(OSNetStream *stream)
+os_net_stream_free(u32 stream_id)
 {
-    s_data.free_streams[s_data.free_stream_count++] = stream;
+    s_free_ids[s_free_id_count] = stream_id;
+    s_free_id_count += 1;
 }
 
-internal_fn OSNetStream *
+internal_fn u32
 os_net_stream_alloc()
 {
-    if (unlikely(s_data.free_stream_count == 0)) {
-        return 0;
+    if (s_free_id_count == 0) {
+        return OS_NET_STREAM_ID_INVALID;
     }
 
-    OSNetStream *stream = s_data.free_streams[--s_data.free_stream_count];
-    return stream;
-}
+    u32 id = s_free_ids[s_free_id_count-1];
+    s_free_id_count -= 1;
 
-void
-os_net_streams_init(MemArena *arena, size_t max_stream_count)
-{
-    s_data.free_stream_count = max_stream_count;
-    s_data.max_stream_count = max_stream_count;
-    s_data.streams = mem_arena_push(arena, max_stream_count * sizeof(OSNetStream));
-    s_data.free_streams = mem_arena_push(arena, max_stream_count * sizeof(OSNetStream*));
-    for (size_t i = 0; i < max_stream_count; i++) {
-        s_data.streams[i].fd = -1; // probably redundant/unnecessary
-    }
-    for (size_t i = 0; i < max_stream_count; i++) {
-        s_data.free_streams[i] = &s_data.streams[i];
-    }
+    return id;
 }
 
 
 
 b32
-os_net_stream_send(OSNetStream *stream, void *buffer, size_t size)
+os_net_stream_send(u32 stream_id, void *buffer, size_t size)
 {
+    OSNetStream *stream = &s_streams[stream_id];
+
     size_t sent = send(stream->fd, buffer, size, 0);
     if (sent == -1) {
         printf("send failed\n");
@@ -82,8 +63,10 @@ os_net_stream_send(OSNetStream *stream, void *buffer, size_t size)
 }
 
 b32
-os_net_stream_recv(OSNetStream *stream, void *buffer, size_t size)
+os_net_stream_recv(u32 stream_id, void *buffer, size_t size)
 {
+    OSNetStream *stream = &s_streams[stream_id];
+
     ssize_t recvd = recv(stream->fd, buffer, size, 0);
     if (unlikely(recvd == -1 || recvd != size)) {
         return false;
@@ -93,36 +76,40 @@ os_net_stream_recv(OSNetStream *stream, void *buffer, size_t size)
 }
 
 int
-os_net_stream_get_fd(OSNetStream *stream)
+os_net_stream_get_fd(u32 stream_id)
 {
+    OSNetStream *stream = &s_streams[stream_id];
     return stream->fd;
 }
 
 void
-os_net_stream_close(OSNetStream *stream)
+os_net_stream_close(u32 stream_id)
 {
+    OSNetStream *stream = &s_streams[stream_id];
     close(stream->fd);
 }
 
-OSNetStream *
-os_net_stream_accept(OSNetStream *listener)
+u32
+os_net_stream_accept(u32 listener_id)
 {
     int fd;
     struct sockaddr_in addr;
     socklen_t addr_size = sizeof(addr);
 
+    OSNetStream *listener = &s_streams[listener_id];
     fd = accept(listener->fd, (struct sockaddr*)&addr, &addr_size);
     if (fd == -1) {
         printf("accept failed\n");
         return 0;
     }
 
-    OSNetStream *stream = os_net_stream_alloc();
+    u32 stream_id = os_net_stream_alloc();
+    OSNetStream *stream = &s_streams[stream_id];
     stream->fd = fd;
-    return stream;
+    return stream_id;
 }
 
-OSNetStream *
+u32
 os_net_stream_listen(u16 port)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -155,16 +142,18 @@ os_net_stream_listen(u16 port)
         return 0;
     }
 
-    OSNetStream *stream = os_net_stream_alloc();
+    u32 listener_id = os_net_stream_alloc();
+    OSNetStream *stream = &s_streams[listener_id];
     stream->fd = fd;
-    return stream;
+
+    return listener_id;
 }
 
-OSNetStream *
+u32
 os_net_stream_connect(char *address, u16 port)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (!fd) {
+    if (fd == -1) {
         printf("cant open socket\n");
         return 0;
     }
@@ -181,15 +170,23 @@ os_net_stream_connect(char *address, u16 port)
         return 0;
     }
 
-    OSNetStream *stream = os_net_stream_alloc();
+    u32 stream_id = os_net_stream_alloc();
+    OSNetStream *stream = &s_streams[stream_id];
     stream->fd = fd;
-    return stream;
+
+    return stream_id;
 }
 
-OSNetStream *
-os_net_stream_create(MemArena *arena)
+void
+os_net_streams_init(MemArena *arena, size_t max_stream_count)
 {
-    OSNetStream *stream = mem_arena_push(arena, sizeof(OSNetStream));
-    return stream;
+    s_max_stream_count = max_stream_count;
+    s_streams = mem_arena_push(arena, max_stream_count * sizeof(OSNetStream));
+
+    s_free_id_count = max_stream_count;
+    s_free_ids = mem_arena_push(arena, max_stream_count * sizeof(u32));
+    for (size_t i = 0; i < max_stream_count; i++) {
+        s_free_ids[i] = i;
+    }
 }
 

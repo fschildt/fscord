@@ -19,4 +19,7 @@ void server_connection_terminate();
 void server_connection_handle_events();
 ServerConnectionStatus server_connection_get_status();
 
+void send_c2s_login(String32 *username, String32 *password);
+void send_c2s_chat_message(String32 *content);
+
 #endif // SERVER_CONNECTION_H

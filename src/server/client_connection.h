@@ -4,15 +4,23 @@
 #include <basic/basic.h>
 #include <basic/string32.h>
 #include <os/os.h>
+#include <messages/messages.h>
 
 typedef struct {
-    String32Buffer *username; // Todo: 'cursor' field unused, but the struct is easy to use. Keep it?
-    OSNetSecureStream *secure_stream;
+    u32 secure_stream_id;
+    u32 recv_buffer_size;
+    u32 recv_buffer[1408];
+    String32Buffer username;
 } ClientConnection;
 
-void client_connection_deinit_and_free(i16 id);
-i16  client_connection_alloc_and_init(OSNetSecureStream *secure_stream);
+#define CLIENT_CONNECTION_INVALID_ID U32_MAX
+
 b32  client_connections_create(MemArena *arena);
+b32  client_connection_add(u32 secure_stream_id); // remove handled internally
+
+void send_s2c_login(u32 login_result);
+void send_s2c_user_update(String32 *username, u32 online_status);
+void send_s2c_chat_message(String32 *username, String32 *content);
 
 
 #endif // CLIENT_CONNECTION_H

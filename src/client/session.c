@@ -260,7 +260,7 @@ session_process_event(Session *session, OSEvent *event)
         u32 codepoint = event->key_press.code;
         if (codepoint == '\r') {
             String32 *trans_prompt = string32_buffer_to_string32(trans_arena, session->prompt);
-            c2s_chat_message(trans_prompt);
+            send_c2s_chat_message(trans_prompt);
             string32_buffer_reset(session->prompt);
             session->prompt_cursor = 0;
         }

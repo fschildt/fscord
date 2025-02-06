@@ -1,4 +1,5 @@
-#include "client/server_connection.h"
+#include "os/os.h"
+#include <client/server_connection.h>
 #include <basic/basic.h>
 #include <client/fscord.h>
 #include <crypto/rsa.h>
@@ -7,27 +8,73 @@
 
 
 typedef struct {
-    char *address;
+    ServerConnectionStatus status;
+    u32 secure_stream_id;
+
+    MemArena send_arena;
+    u8 send_arena_mem[MESSAGES_MAX_PACKAGE_SIZE];
+
+    MemArena recv_arena;
+    u8 recv_arena_size[MESSAGES_MAX_PACKAGE_SIZE];
+
+    char address[128];
     u16 port;
-    ServerConnectionStatus status; // Todo: use this in code
-    EVP_PKEY *client_rsa_public;
-    EVP_PKEY *server_rsa_public;
-    OSNetSecureStream *secure_stream;
-    u32 package_size;
-    char package_data[MESSAGES_MAX_PACKAGE_SIZE];
 } ServerConnection;
 
 
+internal_var ServerConnection s_server_connection;
 internal_var struct Fscord *s_fscord;
-internal_var MemArena *s_trans_arena;
-internal_var ServerConnection *s_server_connection;
+
+
+void
+send_c2s_chat_message(String32 *content)
+{
+    MemArena *send_arena = &s_server_connection.send_arena;
+
+
+    C2S_ChatMessage *chat_message = mem_arena_push(send_arena, sizeof(C2S_ChatMessage));
+
+    String32 *content_copy = string32_create_from_string32(send_arena, content);
+    chat_message->content = (String32*)((u8*)content_copy - send_arena->size_used);
+
+    chat_message->header.type = C2S_CHAT_MESSAGE;
+    chat_message->header.size = send_arena->size_used;
+
+
+    os_net_secure_stream_send(s_server_connection.secure_stream_id, send_arena->memory, send_arena->size_used);
+    mem_arena_reset(send_arena);
+}
+
+
+void
+send_c2s_login(String32 *username, String32 *password)
+{
+    MemArena *send_arena = &s_server_connection.send_arena;
+
+
+    C2S_Login *login = mem_arena_push(send_arena, sizeof(C2S_Login));
+
+    String32 *username_copy = string32_create_from_string32(send_arena, username);
+    login->username = (String32*)((u8*)username_copy - send_arena->size_used);
+
+    String32 *password_copy = string32_create_from_string32(send_arena, password);
+    login->password = (String32*)((u8*)password_copy - send_arena->size_used);
+
+    login->header.type = C2S_LOGIN;
+    login->header.size = send_arena->size_used;
+
+
+    os_net_secure_stream_send(s_server_connection.secure_stream_id, send_arena->memory, send_arena->size_used);
+    mem_arena_reset(send_arena);
+}
 
 
 internal_fn void
 handle_s2c_user_update()
 {
-    S2C_UserUpdate *user_update = (S2C_UserUpdate*)s_server_connection->package_data;
-    user_update->username = (String32*)(user_update + 1);
+    S2C_UserUpdate *user_update = (S2C_UserUpdate*)s_server_connection.recv_arena.memory;
+    user_update->username = (String32*)((u8*)user_update + (size_t)user_update->username);
+
     if (user_update->status == S2C_USER_UPDATE_ONLINE) {
         session_add_user(s_fscord->session, user_update->username);
     } else {
@@ -39,10 +86,12 @@ handle_s2c_user_update()
 internal_fn void
 handle_s2c_chat_message()
 {
-    S2C_ChatMessage *chat_message = (S2C_ChatMessage*)s_server_connection->package_data;
+    S2C_ChatMessage *chat_message = (S2C_ChatMessage*)s_server_connection.recv_arena.memory;
     chat_message->username = (String32*)((u8*)chat_message + (size_t)chat_message->username);
     chat_message->content  = (String32*)((u8*)chat_message + (size_t)chat_message->content);
+
     Time time = {chat_message->epoch_time_seconds, chat_message->epoch_time_nanoseconds};
+
     session_add_chat_message(s_fscord->session, time, chat_message->username, chat_message->content);
 }
 
@@ -50,9 +99,9 @@ handle_s2c_chat_message()
 internal_fn void
 handle_s2c_login()
 {
-    S2C_Login *login = (S2C_Login*)s_server_connection->package_data;
+    S2C_Login *login = (S2C_Login*)&s_server_connection.recv_arena.memory;
     if (login->login_result == S2C_LOGIN_SUCCESS) {
-        s_server_connection->status = SERVER_CONNECTION_ESTABLISHED;
+        s_server_connection.status = SERVER_CONNECTION_ESTABLISHED;
     }
 }
 
@@ -60,15 +109,22 @@ handle_s2c_login()
 internal_fn b32
 handle_s2c()
 {
-    if (!os_net_secure_stream_recv(s_server_connection->secure_stream, s_server_connection->package_data, sizeof(MessageHeader))) {
+    MemArena *recv_arena = &s_server_connection.recv_arena;
+
+
+    MessageHeader *header = mem_arena_push(recv_arena, sizeof(*header));
+    if (!os_net_secure_stream_recv(s_server_connection.secure_stream_id, header, sizeof(*header))) {
         return false;
     }
 
-    MessageHeader *header = (MessageHeader*)s_server_connection->package_data;
-    size_t size_to_read = header->size - sizeof(MessageHeader);
-    if (!os_net_secure_stream_recv(s_server_connection->secure_stream, s_server_connection->package_data + sizeof(*header), size_to_read)) {
+
+    // Todo: verify body size
+    size_t body_size = header->size - sizeof(MessageHeader);
+    void *body = mem_arena_push(recv_arena, body_size);
+    if (!os_net_secure_stream_recv(s_server_connection.secure_stream_id, body, body_size)) {
         return false;
     }
+
 
     switch (header->type) {
         case S2C_LOGIN:        handle_s2c_login();        break;
@@ -76,6 +132,7 @@ handle_s2c()
         case S2C_USER_UPDATE:  handle_s2c_user_update();  break;
         InvalidDefaultCase;
     }
+
 
     return true;
 }
@@ -94,20 +151,16 @@ server_connection_handle_events()
 void
 server_connection_terminate()
 {
-    os_net_secure_stream_close(s_server_connection->secure_stream);
-
-    if (s_server_connection->client_rsa_public) {
-        rsa_destroy(s_server_connection->client_rsa_public);
-    }
-    InvalidCodePath; // Todo...
+    os_net_secure_stream_close(s_server_connection.secure_stream_id);
+    s_server_connection.secure_stream_id = OS_NET_SECURE_STREAM_ID_INVALID;
 }
 
 
 b32
 server_connection_establish(char *address, u16 port, EVP_PKEY *server_rsa_public)
 {
-    s_server_connection->secure_stream = os_net_secure_stream_connect(address, port, server_rsa_public);
-    if (!s_server_connection->secure_stream) {
+    s_server_connection.secure_stream_id = os_net_secure_stream_connect(address, port, server_rsa_public);
+    if (s_server_connection.secure_stream_id != OS_NET_SECURE_STREAM_ID_INVALID) {
         return false;
     }
 
@@ -118,19 +171,13 @@ server_connection_establish(char *address, u16 port, EVP_PKEY *server_rsa_public
 ServerConnectionStatus
 server_connection_get_status()
 {
-    return s_server_connection->status;
+    return s_server_connection.status;
 }
 
 
 void
 server_connection_create(MemArena *arena, struct Fscord *fscord)
 {
-    s_server_connection = mem_arena_push(arena, sizeof(*s_server_connection));
-
-    // initialize
-    memset(s_server_connection, 0, sizeof(*s_server_connection));
-
     s_fscord = fscord;
-    s_trans_arena = &fscord->trans_arena;
 }
 
