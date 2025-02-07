@@ -290,12 +290,13 @@ os_net_secure_stream_accept(u32 listener_id)
     struct sockaddr_in addr;
     socklen_t addr_size = sizeof(addr);
 
+    printf("accepting...\n");
     int fd = accept(listener->fd, (struct sockaddr*)&addr, &addr_size);
     if (fd == -1) {
         printf("accept() failed\n");
         return OS_NET_SECURE_STREAM_ID_INVALID;
     }
-
+    printf("accepted\n");
 
     u32 secure_stream_id = os_net_secure_stream_alloc();
     if (secure_stream_id == OS_NET_SECURE_STREAM_ID_INVALID) {
@@ -363,7 +364,7 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     struct sockaddr_in target_addr;
     memset(&target_addr, 0, sizeof(target_addr));
     target_addr.sin_family = AF_INET;
-    target_addr.sin_port = htons(1338);
+    target_addr.sin_port = htons(port);
     target_addr.sin_addr.s_addr = inet_addr(address);
     if (connect(fd, (struct sockaddr*)&target_addr, sizeof(target_addr)) == -1) {
         printf("connect failed\n");

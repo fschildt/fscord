@@ -20,6 +20,12 @@ fscord_update(Fscord *fscord)
     connection_status = server_connection_get_status();
     if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
         server_connection_handle_events();
+    } else if (connection_status == SERVER_CONNECTION_NOT_ESTABLISHED) {
+        Login *login = fscord->login;
+        if (login->was_trying_to_connect) {
+            login->warning = SH_LOGIN_WARNING_COULD_NOT_CONNECT;
+            login->was_trying_to_connect = false;
+        }
     }
 
     OSEvent event;
@@ -37,7 +43,7 @@ fscord_update(Fscord *fscord)
             session_process_event(fscord->session, &event);
         }
         else {
-            login_process_event(fscord, &event);
+            login_process_event(fscord->login, &event);
         }
     }
 
@@ -46,7 +52,7 @@ fscord_update(Fscord *fscord)
         session_draw(fscord->session);
     }
     else {
-        login_draw(fscord);
+        login_draw(fscord->login);
     }
 
 #if 0
@@ -104,7 +110,7 @@ fscord_create(void *memory, size_t memory_size)
     os_net_secure_streams_init(arena, 1);
     server_connection_create(arena, fscord);
 
-    fscord->login = login_create(arena);
+    fscord->login = login_create(arena, fscord);
     fscord->session = session_create(arena, fscord);
 
     return fscord;

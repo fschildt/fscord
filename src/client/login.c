@@ -14,14 +14,13 @@
 #include <stdlib.h>
 
 typedef struct Fscord Fscord;
+internal_var Fscord *s_fscord;
 
 void
-login_draw(Fscord *fscord)
+login_draw(Login *login)
 {
-    Login *login = fscord->login;
-    OSOffscreenBuffer *offscreen = fscord->offscreen_buffer;
-    MemArena *trans_arena = &fscord->trans_arena;
-
+    OSOffscreenBuffer *offscreen = s_fscord->offscreen_buffer;
+    MemArena *trans_arena = &s_fscord->trans_arena;
 
 
     // draw background color
@@ -35,7 +34,7 @@ login_draw(Fscord *fscord)
     // draw widgets background
 
     f32 zoom = 1.f;
-    f32 font_size = fscord->font->y_advance;
+    f32 font_size = s_fscord->font->y_advance;
     V2F32 widgets_bg_size = v2f32(zoom*font_size*28, zoom*font_size*20);
     V2F32 widgets_bg_pos = v2f32_center(widgets_bg_size, v2f32(offscreen->width, offscreen->height));
     RectF32 widgets_bg_rect = rectf32(widgets_bg_pos.x,
@@ -48,7 +47,7 @@ login_draw(Fscord *fscord)
 
     // draw widgets
 
-    Font *font = fscord->font;
+    Font *font = s_fscord->font;
 
     f32 font_height = font_get_height_from_string32(font);
     V2F32 widgets_size = v2f32(font_get_width_from_string32_len(font, 32), font_height*8);
@@ -63,6 +62,9 @@ login_draw(Fscord *fscord)
 
 
     V2F32 curr_pos = widgets_pos;
+
+    draw_string32(offscreen, curr_pos, string32_value(login->warning), font);
+    curr_pos.y += font_height * 3;
 
     draw_string32(offscreen, curr_pos, trans_username, font);
     curr_pos.y += font_height * 1.4;
@@ -80,21 +82,21 @@ login_draw(Fscord *fscord)
 internal_fn b32
 parse_servername(String32Buffer *servername, char *address, size_t address_size, u16 *port)
 {
-    u32 *p0 = servername->codepoints;
-    u32 *p1 = servername->codepoints;
-    u32 *pmax = servername->codepoints + servername->len - 1;
+    u32 *l = servername->codepoints;
+    u32 *r = servername->codepoints;
+    u32 *end = servername->codepoints + servername->len - 1;
 
 
     // address
 
-    while (p1 <= pmax && *p1 != ':') {
-        p1++;
+    while (r <= end && *r != ':') {
+        r++;
     }
 
-    size_t address_len = p1 - p0;
+    size_t address_len = r - l;
     if (address_len > 0 && address_len < address_size) {
         for (size_t i = 0; i < address_len; i++) {
-            address[i] = p0[i];
+            address[i] = l[i];
         }
         address[address_len] = '\0';
     } else {
@@ -104,19 +106,19 @@ parse_servername(String32Buffer *servername, char *address, size_t address_size,
 
     // port
 
-    p0 = p1 + 1;
-    p1 = pmax;
-    if (p0 > pmax) {
+    l = r + 1;
+    r = end;
+    if (l > r) {
         return false;
     }
 
-    size_t port_len = p1 - p0 + 1;
+    size_t port_len = r - l + 1;
     char port_cstr[6];
     if (port_len >= 6) {
         return false;
     }
     for (size_t i = 0; i < port_len; i++) {
-        port_cstr[i] = p0[i];
+        port_cstr[i] = l[i];
     }
     port_cstr[port_len] = '\0';
 
@@ -130,15 +132,13 @@ parse_servername(String32Buffer *servername, char *address, size_t address_size,
 }
 
 internal_fn void
-login_process_special_key_press(Fscord *state, OSKeyPress key_press)
+login_process_special_key_press(Login *login, OSKeyPress key_press)
 {
-    Login *view = state->login;
-
     String32Buffer *buffer;
-    if (view->is_username_active) {
-        buffer = view->username;
+    if (login->is_username_active) {
+        buffer = login->username;
     } else {
-        buffer = view->servername;
+        buffer = login->servername;
     }
 
     switch (key_press.code) {
@@ -155,9 +155,8 @@ login_process_special_key_press(Fscord *state, OSKeyPress key_press)
 }
 
 internal_fn void
-login_process_unicode_key_press(Fscord *fscord, OSKeyPress key_press)
+login_process_unicode_key_press(Login *login, OSKeyPress key_press)
 {
-    Login *login = fscord->login;
     switch (key_press.code) {
         case '\t': {
             login->is_username_active = !login->is_username_active;
@@ -166,36 +165,36 @@ login_process_unicode_key_press(Fscord *fscord, OSKeyPress key_press)
         case '\r': {
             ServerConnectionStatus status = server_connection_get_status();
             if (status == SERVER_CONNECTION_ESTABLISHED) {
-                InvalidCodePath;
+                return;
+            } else if (status == SERVER_CONNECTION_ESTABLISHING) {
                 return;
             }
+
             assert(status == SERVER_CONNECTION_NOT_ESTABLISHED);
 
-
-            if (login->username->len <= 0) {
+            if (login->username->len == 0) {
                 login->warning = SH_LOGIN_WARNING_USERNAME_INVALID;
                 break;
             }
 
-
             char address[64];
             u16 port;
             if (!parse_servername(login->servername, address, ARRAY_COUNT(address), &port)) {
+                login->warning = SH_LOGIN_WARNING_SERVERNAME_INVALID;
                 break;
             }
-            printf("address = %s, port = %d\n", address, port);
 
-            // Todo: Does this belong here? I simply cut-pasted it from main.
-            // Todo: When disconnecting/reconnecting gets implemented this will LEAK!
-            EVP_PKEY *server_rsa_pub = rsa_create_via_file(&fscord->trans_arena, "./server_pubkey.pem", true);
-
-            // Todo: call this from another thread to avoid stalling the program
-            if (!server_connection_establish(address, port, server_rsa_pub)) {
-                rsa_destroy(server_rsa_pub);
-                login->warning = SH_EMPTY; // Todo: display proper error
-                return;
+            // Todo: handle this public key better somehow
+            // Todo: Maybe have a ui function for adding a server where user inputs
+            //       address and key, and we store it somewhere?
+            persist_var EVP_PKEY *server_rsa_pub = 0;
+            if (!server_rsa_pub) {
+                server_rsa_pub = rsa_create_via_file(&s_fscord->trans_arena, "./server_pubkey.pem", true);
             }
 
+            server_connection_establish(address, port, server_rsa_pub);
+
+            login->was_trying_to_connect = true;
             login->warning = SH_LOGIN_WARNING_CONNECTING;
         } break;
 
@@ -212,30 +211,33 @@ login_process_unicode_key_press(Fscord *fscord, OSKeyPress key_press)
 }
 
 internal_fn void
-login_process_key_press(Fscord *fscord, OSKeyPress key_press)
+login_process_key_press(Login *login, OSKeyPress key_press)
 {
-    Login *login = fscord->login;
     login->warning = SH_EMPTY;
 
     if (key_press.is_unicode) {
-        login_process_unicode_key_press(fscord, key_press);
+        login_process_unicode_key_press(login, key_press);
     } else {
-        login_process_special_key_press(fscord, key_press);
+        login_process_special_key_press(login, key_press);
     }
 }
- 
+
 void
-login_process_event(Fscord *fscord, OSEvent *event)
+login_process_event(Login *login, OSEvent *event)
 {
     if (event->type == OS_EVENT_KEY_PRESS) {
-        login_process_key_press(fscord, event->key_press);
+        login_process_key_press(login, event->key_press);
     }
 }
 
 Login *
-login_create(MemArena *arena)
+login_create(MemArena *arena, Fscord *fscord)
 {
+    s_fscord = fscord;
+
     Login *login = mem_arena_push(arena, sizeof(Login));
+    login->is_username_active = false;
+    login->was_trying_to_connect = false;
     login->username = string32_buffer_create(arena, 32);
     login->servername = string32_buffer_create(arena, 32);
     login->warning = SH_EMPTY;

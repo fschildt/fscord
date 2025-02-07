@@ -8,17 +8,18 @@
 
 
 typedef struct {
-    ServerConnectionStatus status;
-    u32 secure_stream_id;
+    volatile ServerConnectionStatus status;
+    volatile u32 secure_stream_id;
+
+    char address[128];
+    u16 port;
+    EVP_PKEY *server_rsa_pub;
 
     MemArena send_arena;
     u8 send_arena_mem[MESSAGES_MAX_PACKAGE_SIZE];
 
     MemArena recv_arena;
-    u8 recv_arena_size[MESSAGES_MAX_PACKAGE_SIZE];
-
-    char address[128];
-    u16 port;
+    u8 recv_arena_mem[MESSAGES_MAX_PACKAGE_SIZE];
 } ServerConnection;
 
 
@@ -156,15 +157,45 @@ server_connection_terminate()
 }
 
 
-b32
-server_connection_establish(char *address, u16 port, EVP_PKEY *server_rsa_public)
+
+// TODO: THIS THREADING IS TEMPORARY. WE WANT TO USE OS/OS.H THREADS
+
+internal_fn void *
+server_connection_establish_runner(void *data)
 {
-    s_server_connection.secure_stream_id = os_net_secure_stream_connect(address, port, server_rsa_public);
-    if (s_server_connection.secure_stream_id != OS_NET_SECURE_STREAM_ID_INVALID) {
-        return false;
+    char *address = s_server_connection.address;
+    u16 port = s_server_connection.port;
+    EVP_PKEY *rsa = s_server_connection.server_rsa_pub;
+
+    u32 secure_stream_id = os_net_secure_stream_connect(address, port, rsa);
+    if (secure_stream_id == OS_NET_SECURE_STREAM_ID_INVALID) {
+        s_server_connection.status = SERVER_CONNECTION_NOT_ESTABLISHED;
+        pthread_exit(0);
     }
 
-    return true;
+    s_server_connection.secure_stream_id = secure_stream_id;
+    s_server_connection.status = SERVER_CONNECTION_ESTABLISHED;
+
+    pthread_exit(0);
+}
+
+void
+server_connection_establish(char *address, u16 port, EVP_PKEY *server_rsa_pub)
+{
+    s_server_connection.status = SERVER_CONNECTION_ESTABLISHING;
+
+    strncpy(s_server_connection.address, address, strlen(address));
+    s_server_connection.port = port;
+    s_server_connection.server_rsa_pub = server_rsa_pub;
+
+    pthread_t tid;
+    int err = pthread_create(&tid, 0, server_connection_establish_runner, 0);
+    if (err != 0) {
+        printf("pthread_create error in server_connection_establish\n");
+        s_server_connection.status = SERVER_CONNECTION_NOT_ESTABLISHED;
+    }
+
+    return;
 }
 
 
@@ -179,5 +210,15 @@ void
 server_connection_create(MemArena *arena, struct Fscord *fscord)
 {
     s_fscord = fscord;
+    s_server_connection.status = SERVER_CONNECTION_NOT_ESTABLISHED;
+    s_server_connection.secure_stream_id = OS_NET_SECURE_STREAM_ID_INVALID;
+
+    mem_arena_init(&s_server_connection.send_arena,
+                   s_server_connection.send_arena_mem,
+                   sizeof(s_server_connection.send_arena_mem));
+
+    mem_arena_init(&s_server_connection.recv_arena,
+                   s_server_connection.recv_arena_mem,
+                   sizeof(s_server_connection.recv_arena_mem));
 }
 

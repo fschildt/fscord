@@ -11,6 +11,7 @@ struct Fscord;
 
 typedef struct {
     b32 is_username_active; // else servername is selected
+    b32 was_trying_to_connect;
 
     String32Buffer *username;
     String32Buffer *servername;
@@ -20,8 +21,8 @@ typedef struct {
     EVP_PKEY *rsa_server_pub;
 } Login;
 
-Login *login_create(MemArena *arena);
-void login_process_event(struct Fscord *fscord, OSEvent *event);
-void login_draw(struct Fscord *fscord);
+Login *login_create(MemArena *arena, struct Fscord *fscord);
+void login_process_event(Login *login, OSEvent *event);
+void login_draw(Login *login);
 
 #endif // LOGIN_H

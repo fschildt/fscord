@@ -170,6 +170,9 @@ client_connections_runner(void *data)
     struct epoll_event events[MESSAGES_MAX_USER_COUNT];
     for (;;) {
         i32 event_count = epoll_wait(s_epoll_fd, events, MESSAGES_MAX_USER_COUNT, -1);
+        if (event_count > 0) {
+            printf("epoll event_count = %d\n", event_count);
+        }
         if (event_count == -1) {
             perror("epoll_wait:");
         }

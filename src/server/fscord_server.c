@@ -70,7 +70,6 @@ main(int argc, char **argv)
     }
 
 
-    os_net_streams_init(&arena, MESSAGES_MAX_USER_COUNT + 1);
     os_net_secure_streams_init(&arena, MESSAGES_MAX_USER_COUNT + 1);
 
 
@@ -82,11 +81,14 @@ main(int argc, char **argv)
     }
 
 
+    #if 0
     if (!client_connections_create(&arena)) {
         return EXIT_FAILURE;
     }
+    #endif
 
 
+    printf("listening on port %d\n", args.port);
     for (;;) {
         u32 secure_stream_id = os_net_secure_stream_accept(listener);
         if (secure_stream_id != OS_NET_SECURE_STREAM_ID_INVALID) {
