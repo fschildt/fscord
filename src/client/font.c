@@ -11,28 +11,28 @@ font_get_glyph(Font *font, u32 codepoint)
 }
 
 f32
-font_string32_width(Font *font, String32 *str)
+font_get_width_from_string32(Font *font, String32 *str)
 {
     f32 width = font->x_advance * str->len;
     return width;
 }
 
 f32
-font_string32_width_via_len(Font *font, size_t len)
+font_get_width_from_string32_len(Font *font, size_t len)
 {
     f32 width = font->x_advance * len;
     return width;
 }
 
 size_t
-font_string32_len_via_width(Font *font, f32 width)
+font_get_string32_len_from_width(Font *font, f32 width)
 {
     size_t len = font->x_advance / width;
     return len;
 }
 
 f32
-font_string32_height(Font *font)
+font_get_height_from_string32(Font *font)
 {
     return font->y_advance;
 }

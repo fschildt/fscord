@@ -26,6 +26,8 @@ mem_arena_reset(MemArena *arena)
 MemArena
 mem_arena_make_subarena(MemArena *arena, size_t size)
 {
+    assert(arena->size_used + size <= arena->size_max);
+
     MemArena sub_arena;
     void *mem = mem_arena_push(arena, size);
     mem_arena_init(&sub_arena, mem, size);

@@ -22,12 +22,18 @@ login_draw(Fscord *fscord)
     OSOffscreenBuffer *offscreen = fscord->offscreen_buffer;
     MemArena *trans_arena = &fscord->trans_arena;
 
+
+
     // draw background color
+
     RectF32 bg_rect = rectf32(0, 0, offscreen->width, offscreen->height);
     V3F32 bg_col = v3f32(0.4, 0.2, 0.2);
     draw_rectf32(offscreen, bg_rect, bg_col);
 
+
+
     // draw widgets background
+
     f32 zoom = 1.f;
     f32 font_size = fscord->font->y_advance;
     V2F32 widgets_bg_size = v2f32(zoom*font_size*28, zoom*font_size*20);
@@ -38,14 +44,36 @@ login_draw(Fscord *fscord)
                                       widgets_bg_pos.y + widgets_bg_size.y);
     draw_rectf32(offscreen, widgets_bg_rect, v3f32(0.8, 0.6, 0.4));
 
-    // draw textboxes
-    // Todo: make a proper layout
+
+
+    // draw widgets
+
     Font *font = fscord->font;
+
+    f32 font_height = font_get_height_from_string32(font);
+    V2F32 widgets_size = v2f32(font_get_width_from_string32_len(font, 32), font_height*8);
+    V2F32 widgets_gap = v2f32((widgets_bg_size.w - widgets_size.w) / 2,
+                              (widgets_bg_size.h - widgets_size.h) / 2);
+    V2F32 widgets_pos = v2f32(widgets_bg_pos.x + widgets_gap.w,
+                              widgets_bg_pos.y + widgets_gap.h);
+
 
     String32 *trans_servername = string32_buffer_to_string32(trans_arena, login->servername);
     String32 *trans_username = string32_buffer_to_string32(trans_arena, login->username);
-    draw_string32(offscreen, v2f32(0, 0), trans_servername, font);
-    draw_string32(offscreen, v2f32(0, font->y_advance), trans_username, font);
+
+
+    V2F32 curr_pos = widgets_pos;
+
+    draw_string32(offscreen, curr_pos, trans_username, font);
+    curr_pos.y += font_height * 1.4;
+
+    draw_string32(offscreen, curr_pos, string32_value(SH_LOGIN_USERNAME_HINT), font);
+    curr_pos.y += font_height * 2.4;
+
+    draw_string32(offscreen, curr_pos, trans_servername, font);
+    curr_pos.y += font_height * 1.4;
+
+    draw_string32(offscreen, curr_pos, string32_value(SH_LOGIN_SERVERNAME_HINT), font);
 }
 
 

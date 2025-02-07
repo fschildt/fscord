@@ -26,13 +26,15 @@ string32_handles_load_language()
 
     mem_arena_reset(&arena);
 
-    string32_values = mem_arena_push(&arena, SH_COUNT*sizeof(String32Handle));
+    string32_values = mem_arena_push(&arena, SH_COUNT*sizeof(*string32_values));
     string32_values[SH_EMPTY] = string32_create_from_ascii(&arena, "");
     string32_values[SH_LOGIN_USERNAME_HINT] = string32_create_from_ascii(&arena, "username:");
     string32_values[SH_LOGIN_SERVERNAME_HINT] = string32_create_from_ascii(&arena, "servername:");
     string32_values[SH_LOGIN_WARNING_USERNAME_INVALID] = string32_create_from_ascii(&arena, "error: username is invalid.");
     string32_values[SH_LOGIN_WARNING_SERVERNAME_INVALID] = string32_create_from_ascii(&arena, "error: servername is invalid.");
     string32_values[SH_LOGIN_WARNING_CONNECTING] = string32_create_from_ascii(&arena, "connecting...");
+
+    printf("string32_handles_load_language size = %lu/%lu\n", arena.size_used, arena.size_max);
 }
 
 

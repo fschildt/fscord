@@ -33,7 +33,7 @@ session_draw_chat_message(ChatMessage *message, V2F32 pos)
 
     String32 *time_str = string32_create_from_ascii(trans_arena, time_cstr);
     draw_string32(screen, pos, time_str, font);
-    str_width = font_string32_width(font, time_str);
+    str_width = font_get_width_from_string32(font, time_str);
     pos.x += str_width + dx;
 
 
@@ -45,7 +45,7 @@ session_draw_chat_message(ChatMessage *message, V2F32 pos)
 
     String32 *sender_name = string32_buffer_to_string32(trans_arena, sender_name_buff);
     draw_string32(screen, pos, sender_name, font);
-    str_width = font_string32_width(font, sender_name);
+    str_width = font_get_width_from_string32(font, sender_name);
     pos.x += str_width + dx;
 
 
@@ -116,7 +116,7 @@ session_draw_prompt(Session *session, RectF32 rect)
 
 
     // draw cursor
-    pos.x += font_string32_width_via_len(font, session->prompt_cursor);
+    pos.x += font_get_width_from_string32_len(font, session->prompt_cursor);
     RectF32 cursor_rect = rectf32(pos.x, pos.y, pos.x + font->x_advance/4.f, pos.y + font->y_advance);
     V3F32 cursor_col = v3f32(0, 0, 0);
     draw_rectf32(screen, cursor_rect, cursor_col);
@@ -152,7 +152,7 @@ session_draw_users(Session *session, RectF32 rect)
 
         // Todo: the render should draw partial characters based on rectangle boundaries
         size_t name_len_desired = user->name->len;
-        size_t name_len_avail = font_string32_len_via_width(font, width_remain);
+        size_t name_len_avail = font_get_width_from_string32_len(font, width_remain);
         size_t name_len = name_len_desired <= name_len_avail ? name_len_desired : name_len_avail;
         String32 *username = string32_buffer_to_string32_with_len(trans_arena, user->name, name_len);
         draw_string32(screen, pos, username, font);

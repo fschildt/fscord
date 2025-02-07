@@ -37,7 +37,7 @@ typedef struct {
     int fd;
     OSNetSecureStreamStatus status;
 
-    EVP_PKEY *rsa_key; // Todo: nani? ...
+    EVP_PKEY *rsa_key;
 
     b32          recv_aes_header_initialized;
     size_t       recv_aes_payload_size_processed;
