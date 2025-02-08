@@ -33,7 +33,6 @@ target_sources(fscord PUBLIC
     ${FSCORD_SRC_DIR}/os/linux/linux_library.c
     ${FSCORD_SRC_DIR}/os/linux/linux_work_queue.c
     ${FSCORD_SRC_DIR}/os/linux/linux_memory.c
-    ${FSCORD_SRC_DIR}/os/linux/linux_net_stream.c
     ${FSCORD_SRC_DIR}/os/linux/linux_net_secure_stream.c
 )
 target_include_directories(fscord PUBLIC ${FSCORD_INC_DIR})
@@ -48,7 +47,6 @@ target_sources(fscord_server PUBLIC
     ${FSCORD_SRC_DIR}/basic/mem_arena.c
     ${FSCORD_SRC_DIR}/basic/string32.c
     ${FSCORD_SRC_DIR}/os/linux/linux_memory.c
-    ${FSCORD_SRC_DIR}/os/linux/linux_net_stream.c
     ${FSCORD_SRC_DIR}/os/linux/linux_net_secure_stream.c
     ${FSCORD_SRC_DIR}/crypto/aes_gcm.c
     ${FSCORD_SRC_DIR}/crypto/rsa.c

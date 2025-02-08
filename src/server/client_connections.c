@@ -80,8 +80,8 @@ handle_listener_event(ClientConnections *connections, struct epoll_event event)
 {
     // Todo: handle all events
     if (event.events & EPOLLIN) {
-        u32 secure_stream_id = os_net_stream_accept(connections->listener_fd);
-        if (secure_stream_id == OS_NET_STREAM_ID_INVALID) {
+        u32 secure_stream_id = os_net_secure_stream_accept(connections->listener_fd);
+        if (secure_stream_id == OS_NET_SECURE_STREAM_ID_INVALID) {
             return;
         }
 

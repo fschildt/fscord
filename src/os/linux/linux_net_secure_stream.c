@@ -411,7 +411,7 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     if (RAND_bytes(cm_handshake.client_random, sizeof(cm_handshake.client_random)) != 1) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
-        return OS_NET_STREAM_ID_INVALID;
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
 
@@ -422,7 +422,7 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     if (!rsa_encrypt(server_rsa_pub, encrypted_req, &cm_handshake, sizeof(cm_handshake))) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
-        return OS_NET_STREAM_ID_INVALID;
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
 
@@ -431,7 +431,7 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     if (sent_size != sizeof(cm_handshake)) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
-        return OS_NET_STREAM_ID_INVALID;
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
 
@@ -442,7 +442,7 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     if (recvd_size != sizeof(sm_handshake)) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
-        return OS_NET_STREAM_ID_INVALID;
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
     // verify response
@@ -450,7 +450,7 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     if (memcmp(cm_handshake.client_random, sm_handshake.client_random, sizeof(cm_handshake.client_random)) != 0) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
-        return OS_NET_STREAM_ID_INVALID;
+        return OS_NET_SECURE_STREAM_ID_INVALID;
     }
 
     secure_stream->status = OS_NET_SECURE_STREAM_CONNECTED;

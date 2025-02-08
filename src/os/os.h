@@ -96,21 +96,6 @@ void               os_window_swap_buffers(OSWindow *window, OSOffscreenBuffer *o
 
 
 
-#define OS_NET_STREAM_ID_INVALID U32_MAX
-
-void  os_net_streams_init(MemArena *arena, size_t max_count);
-
-u32  os_net_stream_listen(u16 port);
-u32  os_net_stream_accept(u32 listener_id);
-u32  os_net_stream_connect(char *address, u16 port);
-void os_net_stream_close(u32 id);
-
-b32  os_net_stream_send(u32 id, void *buffer, size_t size);
-b32  os_net_stream_recv(u32 id, void *buffer, size_t size);
-int  os_net_stream_get_fd(u32 id);
-
-
-
 typedef enum {
     OS_NET_SECURE_STREAM_CONNECTED,
     OS_NET_SECURE_STREAM_DISCONNECTED,
