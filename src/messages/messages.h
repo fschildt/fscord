@@ -69,6 +69,4 @@ typedef struct {
 } S2C_ChatMessage;
 
 
-
-
 #endif // FSCORD_MESSAGES_H

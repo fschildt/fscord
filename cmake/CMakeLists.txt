@@ -52,7 +52,9 @@ target_sources(fscord_server PUBLIC
     ${FSCORD_SRC_DIR}/os/linux/linux_net_secure_stream.c
     ${FSCORD_SRC_DIR}/crypto/aes_gcm.c
     ${FSCORD_SRC_DIR}/crypto/rsa.c
-    ${FSCORD_SRC_DIR}/server/client_connection.c
+    ${FSCORD_SRC_DIR}/server/client_connections.c
+    ${FSCORD_SRC_DIR}/server/c2s_handler.c
+    ${FSCORD_SRC_DIR}/server/s2c_sender.c
     ${FSCORD_SRC_DIR}/server/fscord_server.c)
 target_include_directories(fscord_server PUBLIC ${FSCORD_INC_DIR})
 target_link_libraries(fscord_server ssl crypto)

@@ -6,15 +6,8 @@
 #include <basic/basic.h>
 #include <basic/mem_arena.h>
 #include <basic/string32.h>
-#include <crypto/rsa.h>
-#include <os/os.h>
-#include <messages/messages.h>
-#include <server/client_connection.h>
+#include <server/client_connections.h>
 
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -56,11 +49,12 @@ format_err:
 int
 main(int argc, char **argv)
 {
-    MemArena arena;
     OSMemory memory;
     if (!os_memory_allocate(&memory, MEBIBYTES(2))) {
         return EXIT_FAILURE;
     }
+
+    MemArena arena;
     mem_arena_init(&arena, memory.p, memory.size);
 
 
@@ -70,31 +64,11 @@ main(int argc, char **argv)
     }
 
 
-    os_net_secure_streams_init(&arena, MESSAGES_MAX_USER_COUNT + 1);
-
-
-    EVP_PKEY *server_rsa_pri = rsa_create_via_file(&arena, "./server_rsa_pri.pem", false);
-
-    u32 listener = os_net_secure_stream_listen(args.port, server_rsa_pri);
-    if (listener == OS_NET_SECURE_STREAM_ID_INVALID) {
+    ClientConnections *client_connections = client_connections_create(&arena, args.port);
+    if (!client_connections) {
         return EXIT_FAILURE;
     }
-
-
-    #if 0
-    if (!client_connections_create(&arena)) {
-        return EXIT_FAILURE;
-    }
-    #endif
-
-
-    printf("listening on port %d\n", args.port);
-    for (;;) {
-        u32 secure_stream_id = os_net_secure_stream_accept(listener);
-        if (secure_stream_id != OS_NET_SECURE_STREAM_ID_INVALID) {
-            client_connection_add(secure_stream_id);
-        }
-    }
+    client_connections_manage(client_connections);
 
 
     return EXIT_SUCCESS;
