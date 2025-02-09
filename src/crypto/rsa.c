@@ -36,7 +36,62 @@ rsa_get_pem(EVP_PKEY *key, char *pem, size_t pem_len)
 }
 
 b32
-rsa_encrypt(EVP_PKEY *key, void *dest, void *src, size_t size)
+rsa_decrypt(EVP_PKEY *key, void *dest, void *src, size_t dest_size)
+{
+    EVP_PKEY_CTX *ctx;
+    
+    ctx = EVP_PKEY_CTX_new(key, 0);
+    if (!ctx) {
+        printf("EVP_PKEY_CTX_new failed\n");
+        return false;
+    }
+
+    if (EVP_PKEY_decrypt_init(ctx) <= 0) {
+        printf("EVP_PKEY_decrypt_init failed\n");
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) <= 0) {
+        printf("EVP_PKEY_CTX_set_rsa_padding failed\n");
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    if (EVP_PKEY_CTX_set_rsa_oaep_md(ctx, EVP_sha512()) <= 0) {
+        printf("EVP_PKEY_CTX_set_rsa_oaep_md failed\n");
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    // get decrypt output size
+    size_t decrypted_len;
+    if (EVP_PKEY_decrypt(ctx, 0, &decrypted_len, src, 512) <= 0) {
+        printf("EVP_PKEY_decrypt failed\n");
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    if (decrypted_len != dest_size) {
+        printf("rsa error: decrypt_len != dest_size\n");
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    // decrypt
+    if (EVP_PKEY_decrypt(ctx, dest, &decrypted_len, src, 512) <= 0) {
+        printf("EVP_PKEY_decrypt failed\n");
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    printf("rsa decrypted %d ciphertext-bytes to %zu plaintext-bytes\n", 512, decrypted_len);
+    EVP_PKEY_CTX_free(ctx);
+    return true;
+}
+
+b32
+rsa_encrypt(EVP_PKEY *key, void *dest, void *src, size_t src_size)
 {
     EVP_PKEY_CTX *ctx;
     
@@ -58,28 +113,36 @@ rsa_encrypt(EVP_PKEY *key, void *dest, void *src, size_t size)
         return false;
     }
 
-    size_t ciphertext_len;
-    if (EVP_PKEY_encrypt(ctx, 0, &ciphertext_len, src, size) <= 0) {
-        printf("EVP_PKEY_encrypt failed\n");
+    if (EVP_PKEY_CTX_set_rsa_oaep_md(ctx, EVP_sha512()) <= 0) {
+        printf("EVP_PKEY_CTX_set_rsa_oaep_md failed\n");
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
 
-    if (EVP_PKEY_encrypt(ctx, dest, &ciphertext_len, src, size) <= 0) {
-        printf("EVP_PKEY_encrypt failed\n");
+    // get encrypt output size
+    size_t output_len;
+    if (EVP_PKEY_encrypt(ctx, 0, &output_len, src, src_size) <= 0) {
+        printf("EVP_PKEY_encrypt to get size failed\n");
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
 
-    printf("rsa encrypted %zu plaintext-bytes to %zu ciphertext-bytes\n", size, ciphertext_len);
+    if (output_len != 512) {
+        printf("rsa encryption error: expected encrypt_len 512 but got %zu\n", output_len);
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    // encrypt
+    if (EVP_PKEY_encrypt(ctx, dest, &output_len, src, src_size) <= 0) {
+        printf("EVP_PKEY_encrypt to encrypt failed\n");
+        EVP_PKEY_CTX_free(ctx);
+        return false;
+    }
+
+    printf("rsa encrypted %zu plaintext-bytes to %zu ciphertext-bytes\n", src_size, output_len);
     EVP_PKEY_CTX_free(ctx);
     return true;
-}
-
-b32
-rsa_decrypt(EVP_PKEY *key, void *dest, void *src, size_t size)
-{
-    return false;
 }
 
 void
@@ -154,17 +217,20 @@ rsa_create_via_pem(char *pem, size_t pem_len, b32 is_public)
 }
 
 EVP_PKEY *
-rsa_create_via_file(MemArena *trans_arena, char *filepath, b32 is_public)
+rsa_create_via_file(MemArena *arena, char *filepath, b32 is_public)
 {
     EVP_PKEY *key = 0;
 
-    size_t arena_save = mem_arena_save(trans_arena);
+    size_t arena_save = mem_arena_save(arena);
+
     size_t pem_len;
-    char *pem = os_read_file_as_string(trans_arena, filepath, &pem_len);
-    if (pem) {
-        key = rsa_create_via_pem(pem, pem_len, is_public);
+    char *pem = os_read_file_as_string(arena, filepath, &pem_len);
+    if (!pem) {
+        printf("rsa_create_via_file failed, could not read %s\n", filepath);
     }
-    mem_arena_restore(trans_arena, arena_save);
+    key = rsa_create_via_pem(pem, pem_len, is_public);
+
+    mem_arena_restore(arena, arena_save);
 
     return key;
 }

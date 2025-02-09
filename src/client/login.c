@@ -189,7 +189,10 @@ login_process_unicode_key_press(Login *login, OSKeyPress key_press)
             //       address and key, and we store it somewhere?
             persist_var EVP_PKEY *server_rsa_pub = 0;
             if (!server_rsa_pub) {
-                server_rsa_pub = rsa_create_via_file(&s_fscord->trans_arena, "./server_pubkey.pem", true);
+                server_rsa_pub = rsa_create_via_file(&s_fscord->trans_arena, "./server_rsa_pub.pem", true);
+                if (!server_rsa_pub) {
+                    break;
+                }
             }
 
             server_connection_establish(address, port, server_rsa_pub);
@@ -241,6 +244,12 @@ login_create(MemArena *arena, Fscord *fscord)
     login->username = string32_buffer_create(arena, 32);
     login->servername = string32_buffer_create(arena, 32);
     login->warning = SH_EMPTY;
+
+    #if !defined(NDEBUG)
+    string32_buffer_append_ascii_cstr(login->username, "user_a");
+    string32_buffer_append_ascii_cstr(login->servername, "127.0.0.1:1905");
+    #endif
+
     return login;
 }
 

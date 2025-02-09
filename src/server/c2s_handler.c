@@ -52,8 +52,6 @@ handle_c2s_login(ClientConnections *conns, ClientConnection *conn)
 void
 handle_c2s(ClientConnections *conns, ClientConnection *conn)
 {
-    // Todo: handle partial recv by changing os_net_secure_stream_recv api to return i32
-
     // recv header
     if (conn->recv_buffer_size < sizeof(MessageHeader)) {
         size_t recv_size = sizeof(MessageHeader) - conn->recv_buffer_size;

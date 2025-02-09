@@ -57,6 +57,7 @@ typedef double f64;
 #define internal_fn static
 #define persist_var static
 
+// Todo: use __FILE__ and __LINE__ macros for debug prints
 #ifdef NDEBUG
 #define debug_printf()
 #else
@@ -70,8 +71,5 @@ typedef double f64;
 #define alloca(size) _alloca(size)
 #endif
 
-// other compiler definitions that should not be forgotten:
-// __LINE__
-// __FILE__
 
 #endif // BASIC_H

@@ -18,7 +18,7 @@ typedef struct {
 
 typedef struct {
     EVP_PKEY *server_rsa_pri;
-    int listener_fd;
+    u32 listener_id;
     int epoll_fd;
 
     size_t max_connection_count;
