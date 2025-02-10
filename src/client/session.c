@@ -61,6 +61,11 @@ session_draw_chat(Session *session, RectF32 rect)
     OSOffscreenBuffer *screen = s_fscord->offscreen_buffer;
 
 
+    // draw background
+    V3F32 bg_color = v3f32(0.2, 0.2, 0.3);
+    draw_rectf32(screen, rect, bg_color);
+
+
     // draw border
     RectF32 border_rect = rect;
     f32 border_size = font->y_advance / 8.f;
@@ -100,6 +105,11 @@ session_draw_prompt(Session *session, RectF32 rect)
     Font *font = s_fscord->font;
 
 
+    // draw background
+    V3F32 bg_color = v3f32(0.2, 0.3, 0.2);
+    draw_rectf32(screen, rect, bg_color);
+
+
     // draw border
     RectF32 border_rect = rect;
     f32 border_size = font->y_advance / 8.f;
@@ -128,6 +138,11 @@ session_draw_users(Session *session, RectF32 rect)
     OSOffscreenBuffer *screen = s_fscord->offscreen_buffer;
     Font *font = s_fscord->font;
     MemArena *trans_arena = &s_fscord->trans_arena;
+
+
+    // draw background
+    V3F32 bg_color = v3f32(0.3, 0.2, 0.2);
+    draw_rectf32(screen, rect, bg_color);
 
 
     // draw border
@@ -160,39 +175,12 @@ session_draw_users(Session *session, RectF32 rect)
     }
 }
 
-#if 0
-internal void
-ui_draw_session(Ui *ui, PlatformOffscreenBuffer *screen, State *state)
-{
-    V2F32 pos = v2(0, 0);
-    V2F32 dim = v2(screen->width, screen->height);
-    V3 col = V3F32(0.8, 0.6, 0.4);
-    draw_rectf32(screen, pos, dim, col);
-
-
-    f32 scale = ui->font->y_advance;
-
-
-    V2F32 userlist_pos = v2(0, 0);
-    V2F32 userlist_dim = v2(scale * 8, screen->height);
-
-    V2F32 prompt_pos = v2(userlist_dim.x, 0);
-    V2F32 prompt_dim = v2(screen->width - userlist_dim.x, scale*2);
-
-    V2F32 history_pos = v2(prompt_pos.x, prompt_pos.y + prompt_dim.y);
-    V2F32 history_dim = v2(prompt_dim.x, screen->height - prompt_dim.y);
-
-    ui_draw_userlist(ui, screen, userlist_pos, userlist_dim);
-    ui_draw_prompt(ui, screen, prompt_pos, prompt_dim);
-    ui_draw_history(ui, screen, history_pos, history_dim);
-}
-#endif
 void
 session_draw(Session *session)
 {
     OSOffscreenBuffer *screen = s_fscord->offscreen_buffer;
 
-    f32 left_width = screen->width * 0.7;
+    f32 left_width = screen->width * 0.3;
     f32 right_width = screen->width - left_width;
     f32 prompt_height = screen->height * 0.1; // Todo: ui_textbox_get_height(...)
 

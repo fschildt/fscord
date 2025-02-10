@@ -75,7 +75,7 @@ os_net_secure_stream_recv(u32 id, void *buff, size_t size)
 {
     OSNetSecureStream *secure_stream = &s_secure_streams[id];
     if (secure_stream->status == OS_NET_SECURE_STREAM_DISCONNECTED) {
-        return 0;
+        return -1;
     }
 
     i64 size_written_to_buff = 0;

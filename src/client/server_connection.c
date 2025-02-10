@@ -1,10 +1,12 @@
-#include "os/os.h"
+#include <os/os.h>
 #include <client/server_connection.h>
 #include <basic/basic.h>
 #include <client/fscord.h>
 #include <crypto/rsa.h>
 #include <messages/messages.h>
 #include <string.h>
+
+#include <poll.h> // Todo: use os/os.h
 
 
 typedef struct {
@@ -111,10 +113,13 @@ internal_fn b32
 handle_s2c()
 {
     MemArena *recv_arena = &s_server_connection.recv_arena;
+    i64 size_recvd;
 
 
     MessageHeader *header = mem_arena_push(recv_arena, sizeof(*header));
-    if (!os_net_secure_stream_recv(s_server_connection.secure_stream_id, header, sizeof(*header))) {
+    size_recvd = os_net_secure_stream_recv(s_server_connection.secure_stream_id, header, sizeof(*header));
+    if (size_recvd < 0) {
+        printf("unhandled error: size_recvd < 0\n");
         return false;
     }
 
@@ -122,7 +127,9 @@ handle_s2c()
     // Todo: verify body size
     size_t body_size = header->size - sizeof(MessageHeader);
     void *body = mem_arena_push(recv_arena, body_size);
-    if (!os_net_secure_stream_recv(s_server_connection.secure_stream_id, body, body_size)) {
+    size_recvd = os_net_secure_stream_recv(s_server_connection.secure_stream_id, body, body_size);
+    if (size_recvd < 0) {
+        printf("unhandled error: size_recvd < 0\n");
         return false;
     }
 
@@ -139,13 +146,40 @@ handle_s2c()
 }
 
 
-void
+b32
 server_connection_handle_events()
 {
-    b32 handled = true;
-    while (handled) {
-        handled = handle_s2c();
+    struct pollfd pollfd;
+    pollfd.fd = os_net_secure_stream_get_fd(s_server_connection.secure_stream_id);
+    pollfd.events = POLLIN;
+
+    for (;;) {
+        int ret = poll(&pollfd, 1, 0);
+        if (ret == -1) {
+            printf("poll error\n");
+            return false; // Todo: handle error
+        }
+        else if (ret == 0) {
+            return true; // do nothing
+        }
+        else if (pollfd.revents & (POLLERR)) {
+            printf("poll POLLERR\n");
+            return false; // Todo: handle err
+        }
+        else if (pollfd.revents & POLLHUP) {
+            printf("poll POLLHUP\n");
+            return false; // Todo: handle hup
+        }
+        else if (pollfd.revents & POLLIN) {
+            b32 handled = handle_s2c();
+            if (!handled) {
+                return false;
+            }
+            continue;
+        }
     }
+
+    return true;
 }
 
 
@@ -154,6 +188,7 @@ server_connection_terminate()
 {
     os_net_secure_stream_close(s_server_connection.secure_stream_id);
     s_server_connection.secure_stream_id = OS_NET_SECURE_STREAM_ID_INVALID;
+    s_server_connection.status = SERVER_CONNECTION_NOT_ESTABLISHED;
 }
 
 

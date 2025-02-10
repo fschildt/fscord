@@ -4,7 +4,7 @@
 #include <server/client_connections.h>
 
 
-void handle_c2s(ClientConnections *conns, ClientConnection *conn);
+b32 handle_c2s(ClientConnections *conns, ClientConnection *conn);
 
 
 #endif // C2S_HANDLER_H

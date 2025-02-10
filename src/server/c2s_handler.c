@@ -9,7 +9,7 @@ internal_fn void
 handle_c2s_chat_message(ClientConnections *conns, ClientConnection *conn)
 {
     // Todo: verify package size
-    C2S_ChatMessage *chat_message = (C2S_ChatMessage*)conn->recv_buffer;
+    C2S_ChatMessage *chat_message = (C2S_ChatMessage*)conn->recv_buff;
     chat_message->content = (void*)chat_message + (size_t)chat_message->content;
 
     // send message to everyone
@@ -26,7 +26,7 @@ internal_fn void
 handle_c2s_login(ClientConnections *conns, ClientConnection *conn)
 {
     // Todo: verify package size
-    C2S_Login *login = (C2S_Login*)conn->recv_buffer;
+    C2S_Login *login = (C2S_Login*)conn->recv_buff;
     login->username = (void*)login + (size_t)login->username;
     login->password = (void*)login + (size_t)login->password;
 
@@ -49,29 +49,37 @@ handle_c2s_login(ClientConnections *conns, ClientConnection *conn)
 }
 
 
-void
+b32
 handle_c2s(ClientConnections *conns, ClientConnection *conn)
 {
     // recv header
-    if (conn->recv_buffer_size < sizeof(MessageHeader)) {
-        size_t recv_size = sizeof(MessageHeader) - conn->recv_buffer_size;
-        i64 recvd = os_net_secure_stream_recv(conn->secure_stream_id, conn->recv_buffer + conn->recv_buffer_size, recv_size);
-        if (recvd <= 0) {
-            return;
+    if (conn->recv_buff_size_used < sizeof(MessageHeader)) {
+        size_t size_to_recv = sizeof(MessageHeader) - conn->recv_buff_size_used;
+        i64 size_recvd = os_net_secure_stream_recv(conn->secure_stream_id, conn->recv_buff + conn->recv_buff_size_used, size_to_recv);
+        if (size_recvd < 0) {
+            return false;
         }
-        conn->recv_buffer_size += recv_size;
+
+        conn->recv_buff_size_used += size_recvd;
+        if (conn->recv_buff_size_used < sizeof(MessageHeader)) {
+            return true;
+        }
     }
 
 
     // recv body
-    MessageHeader *header = (MessageHeader*)conn->recv_buffer;
-    if (conn->recv_buffer_size < header->size) {
-        size_t recv_size = header->size - conn->recv_buffer_size;
-        i64 recvd = os_net_secure_stream_recv(conn->secure_stream_id, conn->recv_buffer + conn->recv_buffer_size, recv_size);
-        if (recvd <= 0) {
-            return;
+    MessageHeader *header = (MessageHeader*)conn->recv_buff;
+    if (conn->recv_buff_size_used < header->size) {
+        size_t size_to_recv = header->size - conn->recv_buff_size_used;
+        i64 size_recvd = os_net_secure_stream_recv(conn->secure_stream_id, conn->recv_buff + conn->recv_buff_size_used, size_to_recv);
+        if (size_recvd < 0) {
+            return false;
         }
-        conn->recv_buffer_size += recv_size;
+
+        conn->recv_buff_size_used += size_recvd;
+        if (conn->recv_buff_size_used < header->size) {
+            return true;
+        }
     }
 
 
@@ -80,5 +88,10 @@ handle_c2s(ClientConnections *conns, ClientConnection *conn)
         case C2S_LOGIN:        handle_c2s_login(conns, conn);        break;
         case C2S_CHAT_MESSAGE: handle_c2s_chat_message(conns, conn); break;
     }
+
+
+    // cleanup
+    conn->recv_buff_size_used = 0;
+    return true;
 }
 

@@ -44,11 +44,12 @@ client_connection_add(ClientConnections *conns, u32 secure_stream_id)
     }
     u32 conn_id = conns->free_ids[--conns->free_id_count];
     ClientConnection *conn = client_connection_id_to_ptr(conns, conn_id);
+    conn->id = conn_id;
 
 
     struct epoll_event event;
     event.events = EPOLLIN;
-    event.data.u32 = (u32)conn_id;
+    event.data.u32 = conn_id;
 
     int fd = os_net_secure_stream_get_fd(secure_stream_id);
 
@@ -60,7 +61,7 @@ client_connection_add(ClientConnections *conns, u32 secure_stream_id)
 
 
     conn->secure_stream_id = secure_stream_id;
-    conn->recv_buffer_size = 0;
+    conn->recv_buff_size_used = 0;
 
     return conn_id;
 }
@@ -70,6 +71,7 @@ internal_fn void
 handle_client_event(ClientConnections *conns, struct epoll_event event)
 {
     u32 conn_id = event.data.u32;
+
     ClientConnection *conn = client_connection_id_to_ptr(conns, conn_id);
     int fd = os_net_secure_stream_get_fd(conn->secure_stream_id);
 
@@ -82,10 +84,11 @@ handle_client_event(ClientConnections *conns, struct epoll_event event)
         client_connection_rm(conns, conn_id);
         printf("EPOLLHUP occured for client_id = %d, fd = %d\n", conn_id, fd);
     }
-
     // read state
     if (event.events & EPOLLIN) {
-        handle_c2s(conns, conn);
+        if (!handle_c2s(conns, conn)) {
+            return client_connection_rm(conns, conn_id);
+        }
     }
 }
 
@@ -174,7 +177,7 @@ client_connections_create(MemArena *arena, u16 port)
     ClientConnection *conn = conns->connections;
     for (size_t i = 0; i < conns->max_connection_count; i++) {
         conn->secure_stream_id = CLIENT_CONNECTION_INVALID_ID;
-        conn->recv_buffer_size = 0;
+        conn->recv_buff_size_used = 0;
 
         conn->username = (String32*)conn->username_buff;
         conn->username->len = 0;

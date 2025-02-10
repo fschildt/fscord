@@ -19,7 +19,10 @@ fscord_update(Fscord *fscord)
 
     connection_status = server_connection_get_status();
     if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
-        server_connection_handle_events();
+        b32 events_handled = server_connection_handle_events();
+        if (!events_handled) {
+            server_connection_terminate();
+        }
     } else if (connection_status == SERVER_CONNECTION_NOT_ESTABLISHED) {
         Login *login = fscord->login;
         if (login->was_trying_to_connect) {

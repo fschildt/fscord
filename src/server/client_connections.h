@@ -7,9 +7,10 @@
 #include <messages/messages.h>
 
 typedef struct {
+    u32 id;
     u32 secure_stream_id;
-    u32 recv_buffer_size;
-    u32 recv_buffer[1408];
+    u32 recv_buff_size_used;
+    u8 recv_buff[1408];
 
     // Todo: find some cleaner solution to this :(
     String32 *username;
@@ -36,8 +37,8 @@ typedef struct {
 #define CLIENT_CONNECTION_INVALID_ID U32_MAX
 
 ClientConnections *client_connections_create(MemArena *arena, u16 port);
-
 void client_connections_manage(ClientConnections *connections);
+
 ClientConnection* client_connection_id_to_ptr(ClientConnections *connections, u32 id);
 
 
