@@ -154,6 +154,48 @@ login_process_special_key_press(Login *login, OSKeyPress key_press)
     }
 }
 
+void
+login_process_login_result(Login *login, b32 success)
+{
+    assert(login->is_trying_to_login);
+
+    if (success) {
+        s_fscord->is_logged_in = true;
+    }
+    else {
+        login->warning = SH_LOGIN_WARNING_COULD_NOT_CONNECT;
+    }
+
+    login->is_trying_to_login = false;
+    login->is_c2s_login_sent = false;
+}
+
+void
+login_update_login_attempt(Login *login)
+{
+    ServerConnectionStatus status = server_connection_get_status();
+    if (status == SERVER_CONNECTION_NOT_ESTABLISHED) {
+        login->is_trying_to_login = false;
+        login->is_c2s_login_sent = false;
+        login->warning = SH_LOGIN_WARNING_COULD_NOT_CONNECT;
+        return;
+    }
+    else if (status == SERVER_CONNECTION_ESTABLISHING) {
+        return;
+    }
+    else if (status == SERVER_CONNECTION_ESTABLISHED) {
+        if (!login->is_c2s_login_sent) {
+            String32 *username = string32_buffer_to_string32(&s_fscord->trans_arena, login->username);
+            send_c2s_login(username, string32_value(SH_EMPTY));
+            login->is_c2s_login_sent = true;
+        }
+        return;
+    }
+    else {
+        InvalidCodePath;
+    }
+}
+
 internal_fn void
 login_process_unicode_key_press(Login *login, OSKeyPress key_press)
 {
@@ -184,9 +226,6 @@ login_process_unicode_key_press(Login *login, OSKeyPress key_press)
                 break;
             }
 
-            // Todo: handle this public key better somehow
-            // Todo: Maybe have a ui function for adding a server where user inputs
-            //       address and key, and we store it somewhere?
             persist_var EVP_PKEY *server_rsa_pub = 0;
             if (!server_rsa_pub) {
                 server_rsa_pub = rsa_create_via_file(&s_fscord->trans_arena, "./server_rsa_pub.pem", true);
@@ -197,7 +236,7 @@ login_process_unicode_key_press(Login *login, OSKeyPress key_press)
 
             server_connection_establish(address, port, server_rsa_pub);
 
-            login->was_trying_to_connect = true;
+            login->is_trying_to_login = true;
             login->warning = SH_LOGIN_WARNING_CONNECTING;
         } break;
 
@@ -228,6 +267,10 @@ login_process_key_press(Login *login, OSKeyPress key_press)
 void
 login_process_event(Login *login, OSEvent *event)
 {
+    if (login->is_trying_to_login) {
+        return;
+    }
+
     if (event->type == OS_EVENT_KEY_PRESS) {
         login_process_key_press(login, event->key_press);
     }
@@ -240,7 +283,8 @@ login_create(MemArena *arena, Fscord *fscord)
 
     Login *login = mem_arena_push(arena, sizeof(Login));
     login->is_username_active = false;
-    login->was_trying_to_connect = false;
+    login->is_trying_to_login = false;
+    login->is_c2s_login_sent = false;
     login->username = string32_buffer_create(arena, 32);
     login->servername = string32_buffer_create(arena, 32);
     login->warning = SH_EMPTY;

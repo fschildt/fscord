@@ -40,16 +40,15 @@ typedef struct {
 
     EVP_PKEY *rsa_key;
 
-    AesGcmHeader recv_aes_decrypt_header; // recvd with each aes message
-    AesGcmKey    recv_aes_decrypt_key;    // recvd with CM_Handshake
-    AesGcmIv     recv_aes_decrypt_iv;     // recvd_with CM_Handshake
+    AesGcmKey    recv_aes_key;    // recvd with CM_Handshake
+    AesGcmIv     recv_aes_iv;     // recvd_with CM_Handshake
+    AesGcmHeader recv_aes_header; // recvd with each aes message
     b32          recv_aes_header_initialized;
-    size_t       recv_aes_payload_size_remaining;
     size_t       recv_buff_size_used;
     u8           recv_buff[1408];
 
-    AesGcmKey    send_aes_encrypt_key; // recvd with CM_Handshake
-    AesGcmIv     send_aes_encrypt_iv;  // recvd with CM_Handshake
+    AesGcmKey    send_aes_key; // recvd with CM_Handshake
+    AesGcmIv     send_aes_iv;  // recvd with CM_Handshake
     size_t       send_buff_size_used;
     u8           send_buff[1408];
 } OSNetSecureStream;
@@ -70,6 +69,7 @@ os_net_secure_stream_get_status(u32 id)
 }
 
 
+// Todo: This restricts the aes payload size. Be able to deal with greater sizes.
 i64
 os_net_secure_stream_recv(u32 id, void *buff, size_t size)
 {
@@ -78,62 +78,71 @@ os_net_secure_stream_recv(u32 id, void *buff, size_t size)
         return -1;
     }
 
-    i64 size_written_to_buff = 0;
+    if (size > sizeof(secure_stream->recv_buff)) {
+        return -1;
+    }
+
+
     i64 size_to_recv;
     i64 size_recvd;
 
-    while (size) {
-        // 1) recv aes header
-        if (!secure_stream->recv_aes_header_initialized) {
-            void *dest = secure_stream->recv_buff + secure_stream->recv_buff_size_used;
-            size_to_recv = sizeof(AesGcmHeader) - secure_stream->recv_buff_size_used;
-            size_recvd = recv(secure_stream->fd, dest, size_to_recv, 0);
 
-            if (size_recvd < 0) {
-                return -1;
-            } else if (size_recvd < size_to_recv) {
-                secure_stream->recv_buff_size_used += size_to_recv;
-                return 0;
-            }
+    // 1) recv aes header
+    if (!secure_stream->recv_aes_header_initialized) {
+        void *dest = secure_stream->recv_buff + secure_stream->recv_buff_size_used;
+        size_to_recv = sizeof(AesGcmHeader) - secure_stream->recv_buff_size_used;
+        size_recvd = recv(secure_stream->fd, dest, size_to_recv, 0);
 
-            secure_stream->recv_aes_decrypt_header = *(AesGcmHeader*)(secure_stream->recv_buff);
-            secure_stream->recv_buff_size_used = 0;
-            secure_stream->recv_aes_header_initialized = true;
-        }
-
-
-        // 2) recv aes payload
-        size_to_recv = MIN(sizeof(secure_stream->recv_buff), secure_stream->recv_aes_payload_size_remaining);
-        size_to_recv = MIN(size_to_recv, size);
-        size_recvd = os_net_secure_stream_recv(secure_stream->fd, secure_stream->recv_buff, size_to_recv);
         if (size_recvd < 0) {
             return -1;
         }
-
-
-        // 3) decrypt to buff
-        b32 decrypted = aes_gcm_decrypt(&secure_stream->recv_aes_decrypt_key,
-                                        &secure_stream->recv_aes_decrypt_iv,
-                                        buff, secure_stream->recv_buff, size_recvd,
-                                        secure_stream->recv_aes_decrypt_header.tag,
-                                        sizeof(secure_stream->recv_aes_decrypt_header.tag));
-        if (!decrypted) {
-            return -1;
+        else if (size_recvd < size_to_recv) {
+            secure_stream->recv_buff_size_used += size_recvd;
+            return 0;
         }
-        size_written_to_buff += size_recvd;
 
-
-        // 4) cleanup
+        secure_stream->recv_aes_header_initialized = true;
+        secure_stream->recv_aes_header = *(AesGcmHeader*)(secure_stream->recv_buff);
         secure_stream->recv_buff_size_used = 0;
-        secure_stream->recv_aes_payload_size_remaining -= size_recvd;
-        if (secure_stream->recv_aes_payload_size_remaining == 0) {
-            secure_stream->recv_aes_header_initialized = false;
-        }
-
-        size -= size_written_to_buff;
     }
 
-    return size_written_to_buff;
+
+    // 2) recv aes payload
+    if (secure_stream->recv_aes_header.payload_size > sizeof(secure_stream->recv_buff)) {
+        return -1;
+    }
+    if (secure_stream->recv_aes_header.payload_size != size) {
+        return -1;
+    }
+    size_to_recv = secure_stream->recv_aes_header.payload_size - secure_stream->recv_buff_size_used;
+    size_recvd = os_net_secure_stream_recv(secure_stream->fd, secure_stream->recv_buff, size_to_recv);
+    if (size_recvd < 0) {
+        return -1;
+    }
+    else if (size_recvd != size_to_recv) {
+        secure_stream->recv_buff_size_used += size_recvd;
+        return 0;
+    }
+    secure_stream->recv_buff_size_used += size_recvd;
+
+
+    // 3) decrypt to buff
+    b32 decrypted = aes_gcm_decrypt(&secure_stream->recv_aes_key,
+                                    &secure_stream->recv_aes_iv,
+                                    buff, secure_stream->recv_buff, secure_stream->recv_buff_size_used,
+                                    secure_stream->recv_aes_header.tag,
+                                    sizeof(secure_stream->recv_aes_header.tag));
+    if (!decrypted) {
+        return -1;
+    }
+
+
+    // 4) cleanup
+    secure_stream->recv_buff_size_used = 0;
+    secure_stream->recv_aes_header_initialized = false;
+
+
+    return size;
 }
 
 b32
@@ -145,32 +154,28 @@ os_net_secure_stream_send(u32 id, void *buff, size_t size)
     }
 
 
-    // Note: We're sending a new aes header every time, because the recipient
-    //       needs the tag to verify each part of the message
-
-    size_t size_processed = 0;
-    while (size_processed < size) {
+    while (size) {
         AesGcmHeader *aes_header = (AesGcmHeader*)secure_stream->send_buff;
+        void *aes_payload = secure_stream->send_buff + sizeof(*aes_header);
+        i64 aes_payload_size = MIN(size, sizeof(secure_stream->send_buff) - sizeof(*aes_header));
 
-        void *src = buff + size_processed;
-        void *payload = secure_stream->send_buff + sizeof(*aes_header);
-        i64 payload_size = MIN(size, ARRAY_COUNT(secure_stream->send_buff) - sizeof(*aes_header));
-
-        b32 encrypted = aes_gcm_encrypt(&secure_stream->send_aes_encrypt_key,
-                                        &secure_stream->send_aes_encrypt_iv,
-                                        payload, src, payload_size,
+        aes_header->payload_size = aes_payload_size;
+        b32 encrypted = aes_gcm_encrypt(&secure_stream->send_aes_key,
+                                        &secure_stream->send_aes_iv,
+                                        aes_payload, buff, aes_payload_size,
                                         aes_header->tag, sizeof(aes_header->tag));
         if (!encrypted) {
             return false;
         }
 
-        size_t size_to_send = sizeof(*aes_header) + payload_size;
-        i64 sent_size = send(secure_stream->fd, secure_stream->send_buff, size, 0);
-        if (sent_size != size_to_send) {
+        size_t size_to_send = sizeof(*aes_header) + aes_payload_size;
+        i64 size_sent = send(secure_stream->fd, secure_stream->send_buff, size_to_send, 0);
+        if (size_sent != size_to_send) {
             return false;
         }
 
-        size_processed += payload_size;
+        buff += aes_payload_size;
+        size -= aes_payload_size;
     }
 
     return true;
@@ -325,10 +330,10 @@ os_net_secure_stream_accept(u32 listener_id)
 
 
     // process request
-    memcpy(&secure_stream->recv_aes_decrypt_key, &cm_handshake.aes_key_client_encrypt, sizeof(cm_handshake.aes_key_client_encrypt));
-    memcpy(&secure_stream->recv_aes_decrypt_iv,  &cm_handshake.aes_iv_client_encrypt,  sizeof(cm_handshake.aes_iv_client_encrypt));
-    memcpy(&secure_stream->send_aes_encrypt_key, &cm_handshake.aes_key_client_decrypt, sizeof(cm_handshake.aes_key_client_decrypt));
-    memcpy(&secure_stream->send_aes_encrypt_iv,  &cm_handshake.aes_iv_client_decrypt,  sizeof(cm_handshake.aes_iv_client_decrypt));
+    memcpy(&secure_stream->recv_aes_key, &cm_handshake.aes_key_client_encrypt, sizeof(cm_handshake.aes_key_client_encrypt));
+    memcpy(&secure_stream->recv_aes_iv,  &cm_handshake.aes_iv_client_encrypt,  sizeof(cm_handshake.aes_iv_client_encrypt));
+    memcpy(&secure_stream->send_aes_key, &cm_handshake.aes_key_client_decrypt, sizeof(cm_handshake.aes_key_client_decrypt));
+    memcpy(&secure_stream->send_aes_iv,  &cm_handshake.aes_iv_client_decrypt,  sizeof(cm_handshake.aes_iv_client_decrypt));
 
 
     // prepare aes response
@@ -338,8 +343,8 @@ os_net_secure_stream_accept(u32 listener_id)
     memcpy(sm_handshake.client_random, cm_handshake.client_random, sizeof(cm_handshake.client_random));
 
     // encrypt aes response
-    if (!aes_gcm_encrypt(&secure_stream->send_aes_encrypt_key,
-                         &secure_stream->send_aes_encrypt_iv,
+    if (!aes_gcm_encrypt(&secure_stream->send_aes_key,
+                         &secure_stream->send_aes_iv,
                          secure_stream->send_buff + sizeof(*aes_header), &sm_handshake, sizeof(sm_handshake),
                          aes_header->tag, sizeof(aes_header->tag))) {
         close(fd);
@@ -402,22 +407,22 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     secure_stream->rsa_key = server_rsa_pub;
 
 
-    if (!aes_gcm_key_init_random(&secure_stream->send_aes_encrypt_key)) {
+    if (!aes_gcm_key_init_random(&secure_stream->send_aes_key)) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
         return OS_NET_SECURE_STREAM_ID_INVALID;
     }
-    if (!aes_gcm_iv_init(&secure_stream->send_aes_encrypt_iv)) {
+    if (!aes_gcm_iv_init(&secure_stream->send_aes_iv)) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
         return OS_NET_SECURE_STREAM_ID_INVALID;
     }
-    if (!aes_gcm_key_init_random(&secure_stream->recv_aes_decrypt_key)) {
+    if (!aes_gcm_key_init_random(&secure_stream->recv_aes_key)) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
         return OS_NET_SECURE_STREAM_ID_INVALID;
     }
-    if (!aes_gcm_iv_init(&secure_stream->recv_aes_decrypt_iv)) {
+    if (!aes_gcm_iv_init(&secure_stream->recv_aes_iv)) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
         return OS_NET_SECURE_STREAM_ID_INVALID;
@@ -428,10 +433,10 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
 
     // prepare rsa request
     CM_Handshake cm_handshake;
-    memcpy(&cm_handshake.aes_key_client_encrypt, &secure_stream->send_aes_encrypt_key, sizeof(secure_stream->send_aes_encrypt_key));
-    memcpy(&cm_handshake.aes_iv_client_encrypt,  &secure_stream->send_aes_encrypt_iv,  sizeof(secure_stream->send_aes_encrypt_iv));
-    memcpy(&cm_handshake.aes_key_client_decrypt, &secure_stream->recv_aes_decrypt_key, sizeof(secure_stream->recv_aes_decrypt_key));
-    memcpy(&cm_handshake.aes_iv_client_decrypt,  &secure_stream->recv_aes_decrypt_iv,  sizeof(secure_stream->recv_aes_decrypt_iv));
+    memcpy(&cm_handshake.aes_key_client_encrypt, &secure_stream->send_aes_key, sizeof(secure_stream->send_aes_key));
+    memcpy(&cm_handshake.aes_iv_client_encrypt,  &secure_stream->send_aes_iv,  sizeof(secure_stream->send_aes_iv));
+    memcpy(&cm_handshake.aes_key_client_decrypt, &secure_stream->recv_aes_key, sizeof(secure_stream->recv_aes_key));
+    memcpy(&cm_handshake.aes_iv_client_decrypt,  &secure_stream->recv_aes_iv,  sizeof(secure_stream->recv_aes_iv));
     if (RAND_bytes(cm_handshake.client_random, sizeof(cm_handshake.client_random)) != 1) {
         printf("RAND_bytes failed at %s:%d", __FILE__, __LINE__);
         close(fd);
@@ -473,8 +478,8 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
 
     // decrypt aes response
     SM_Handshake sm_handshake;
-    if (!aes_gcm_decrypt(&secure_stream->recv_aes_decrypt_key,
-                         &secure_stream->recv_aes_decrypt_iv,
+    if (!aes_gcm_decrypt(&secure_stream->recv_aes_key,
+                         &secure_stream->recv_aes_iv,
                          &sm_handshake, aes_payload, sizeof(sm_handshake),
                          aes_header->tag, sizeof(aes_header->tag))) {
         close(fd);

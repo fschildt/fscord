@@ -11,17 +11,17 @@
 // - for aes-256 always 32 bytes
 
 // Note: Initialization Vector
-// - for aes-256 always 16 bytes
+// - for aes-256 is always 12 bytes for optimal usage
 // - https://www.rfc-editor.org/rfc/rfc5288#section-3
 
 // Note: Authentication Tag
 // - is sent with every message
 // - is calculated after whole message is encrypted
-// - len preferred to be 12 bytes
+// - len is preferred 16 bytes for max security
 
 
 typedef struct {
-    u8 buff[32]; // always 32 byte for aes-256
+    u8 buff[32];
 } AesGcmKey;
 
 typedef struct {

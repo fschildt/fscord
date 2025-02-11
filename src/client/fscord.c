@@ -15,22 +15,28 @@ internal_fn b32
 fscord_update(Fscord *fscord)
 {
     OSOffscreenBuffer *offscreen_buffer = fscord->offscreen_buffer;
-    ServerConnectionStatus connection_status;
+    Login *login = fscord->login;
+    Session *session = fscord->session;
 
-    connection_status = server_connection_get_status();
-    if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
-        b32 events_handled = server_connection_handle_events();
-        if (!events_handled) {
+
+    // handle special case for login attempt
+    if (login->is_trying_to_login) {
+        login_update_login_attempt(login);
+    }
+
+
+    // handle network events
+    ServerConnectionStatus status = server_connection_get_status();
+    if (status == SERVER_CONNECTION_ESTABLISHED) {
+        b32 handled = server_connection_handle_events();
+        if (!handled) {
             server_connection_terminate();
-        }
-    } else if (connection_status == SERVER_CONNECTION_NOT_ESTABLISHED) {
-        Login *login = fscord->login;
-        if (login->was_trying_to_connect) {
-            login->warning = SH_LOGIN_WARNING_COULD_NOT_CONNECT;
-            login->was_trying_to_connect = false;
+            fscord->is_logged_in = false;
         }
     }
 
+
+    // handle window events
     OSEvent event;
     while (os_window_get_event(fscord->window, &event)) {
         if (event.type == OS_EVENT_WINDOW_RESIZE) {
@@ -41,21 +47,19 @@ fscord_update(Fscord *fscord)
             return false;
         }
 
-        connection_status = server_connection_get_status(); // This might be overkill.
-        if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
-            session_process_event(fscord->session, &event);
+        if (fscord->is_logged_in) {
+            session_process_event(session, &event);
         }
         else {
-            login_process_event(fscord->login, &event);
+            login_process_event(login, &event);
         }
     }
 
-    connection_status = server_connection_get_status();
-    if (connection_status == SERVER_CONNECTION_ESTABLISHED) {
-        session_draw(fscord->session);
+    if (fscord->is_logged_in) {
+        session_draw(session);
     }
     else {
-        login_draw(fscord->login);
+        login_draw(login);
     }
 
 #if 0
@@ -68,6 +72,20 @@ fscord_update(Fscord *fscord)
 
     return true;
 }
+
+
+internal_fn void
+fscord_main(Fscord *fscord)
+{
+    b32 running = true;
+    while (running) {
+        running = fscord_update(fscord);
+
+        os_window_swap_buffers(fscord->window, fscord->offscreen_buffer);
+        //os_sound_player_play(fscord->sound_player);
+    }
+}
+
 
 internal_fn Fscord *
 fscord_create(void *memory, size_t memory_size)
@@ -113,25 +131,16 @@ fscord_create(void *memory, size_t memory_size)
     os_net_secure_streams_init(arena, 1);
     server_connection_create(arena, fscord);
 
+    fscord->is_logged_in = false;
     fscord->login = login_create(arena, fscord);
     fscord->session = session_create(arena, fscord);
 
     return fscord;
 }
 
-internal_fn void
-fscord_main(Fscord *fscord)
-{
-    b32 running = true;
-    while (running) {
-        running = fscord_update(fscord);
 
-        os_window_swap_buffers(fscord->window, fscord->offscreen_buffer);
-        //os_sound_player_play(fscord->sound_player);
-    }
-}
-
-int main(void)
+int
+main(void)
 {
     OSMemory memory;
     if (!os_memory_allocate(&memory, MEBIBYTES(20))) {

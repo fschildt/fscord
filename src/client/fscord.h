@@ -28,6 +28,7 @@ struct Fscord {
     PlaySound ps_user_connected;
     PlaySound ps_user_disconnected;
 
+    b32 is_logged_in;
     Login *login;
     Session *session;
 };

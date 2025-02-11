@@ -10,8 +10,10 @@
 struct Fscord;
 
 typedef struct {
-    b32 is_username_active; // else servername is selected
-    b32 was_trying_to_connect;
+    b32 is_username_active;
+
+    b32 is_trying_to_login;
+    b32 is_c2s_login_sent;
 
     String32Buffer *username;
     String32Buffer *servername;
@@ -22,6 +24,8 @@ typedef struct {
 } Login;
 
 Login *login_create(MemArena *arena, struct Fscord *fscord);
+void login_update_login_attempt(Login *login);
+void login_process_login_result(Login *login, b32 result);
 void login_process_event(Login *login, OSEvent *event);
 void login_draw(Login *login);
 
