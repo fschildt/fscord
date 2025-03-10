@@ -3,7 +3,7 @@
 internal_var MemArena s_send_arena;
 
 void
-send_s2c_chat_message(ClientConnection *conn, String32 *username, String32 *content)
+send_s2c_chat_message(ClientConnection *conn, String32 *username, String32 *content, OSTime now)
 {
     OSTime time = os_time_get_now();
     MemArena *arena = &s_send_arena;
@@ -12,10 +12,10 @@ send_s2c_chat_message(ClientConnection *conn, String32 *username, String32 *cont
     S2C_ChatMessage *chat_message = mem_arena_push(arena, sizeof(S2C_ChatMessage));
 
     String32 *username_copy = string32_create_from_string32(arena, username);
-    chat_message->username = (String32*)((u8*)username_copy - arena->size_used);
+    chat_message->username = (String32*)((u8*)username_copy - (u8*)chat_message);
 
     String32 *content_copy = string32_create_from_string32(arena, content);
-    chat_message->content = (String32*)((u8*)content_copy - arena->size_used);
+    chat_message->content = (String32*)((u8*)content_copy - (u8*)chat_message);
 
     chat_message->epoch_time_seconds = time.seconds;
     chat_message->epoch_time_nanoseconds = time.nanoseconds;
@@ -40,7 +40,7 @@ send_s2c_user_update(ClientConnection *conn, String32 *username, u32 online_stat
     user_update->status = online_status;
 
     String32 *username_copy = string32_create_from_string32(arena, username);
-    user_update->username = (String32*)((u8*)username_copy - arena->size_used);
+    user_update->username = (String32*)((u8*)username_copy - (u8*)user_update);
 
     user_update->header.type = S2C_USER_UPDATE;
     user_update->header.size = arena->size_used;

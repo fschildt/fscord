@@ -103,6 +103,14 @@ string32_buffer_edit(String32Buffer *buffer, OSKeyPress key_press)
         }
         }
     }
+    else {
+        if (key_press.code == OS_KEYCODE_LEFT) {
+            string32_buffer_move_cursor_left(buffer);
+        }
+        else if (key_press.code == OS_KEYCODE_RIGHT) {
+            string32_buffer_move_cursor_right(buffer);
+        }
+    }
 }
 
 
@@ -124,7 +132,7 @@ void
 string32_buffer_append_string32(String32Buffer *buffer, String32 *str)
 {
     size_t len_avail = buffer->max_len - buffer->len;
-    size_t copy_count = len_avail >= str->len ? str->len : len_avail;
+    size_t copy_count = str->len >= len_avail ? len_avail : str->len;
     u32 *dest = buffer->codepoints + buffer->len;
     u32 *src = str->codepoints;
     for (size_t i = 0; i < copy_count; i++) {
@@ -185,7 +193,7 @@ string32_buffer_to_string32_with_len(MemArena *arena, String32Buffer *buffer, si
     size_t push_size = sizeof(String32) + len * sizeof(u32);
     String32 *result = mem_arena_push(arena, push_size);
 
-    memcpy(result->codepoints, buffer->codepoints, len);
+    memcpy(result->codepoints, buffer->codepoints, len * sizeof(u32));
     result->len = len;
 
     return result;

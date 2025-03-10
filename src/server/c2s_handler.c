@@ -12,12 +12,14 @@ handle_c2s_chat_message(ClientConnections *conns, ClientConnection *conn)
     C2S_ChatMessage *chat_message = (C2S_ChatMessage*)conn->recv_buff;
     chat_message->content = (void*)chat_message + (size_t)chat_message->content;
 
-    // send message to everyone
-    for (u32 id_idx = 0; id_idx < conns->used_id_count; id_idx++) {
-        u32 id = conns->used_ids[id_idx];
-        ClientConnection *conn_it = client_connection_id_to_ptr(conns, id);
+    Time now = os_time_get_now();
 
-        send_s2c_chat_message(conn_it, conn->username, chat_message->content);
+    // Todo: make proper groups
+    for (size_t i = 0; i < conns->max_connection_count; i++) {
+        ClientConnection *connection = conns->connections + i;
+        if (connection->username->len > 0) {
+            send_s2c_chat_message(connection, conn->username, chat_message->content, now);
+        }
     }
 }
 
@@ -25,27 +27,81 @@ handle_c2s_chat_message(ClientConnections *conns, ClientConnection *conn)
 internal_fn void
 handle_c2s_login(ClientConnections *conns, ClientConnection *conn)
 {
-    // Todo: verify package size
+    // init package
     C2S_Login *login = (C2S_Login*)conn->recv_buff;
     login->username = (void*)login + (size_t)login->username;
     login->password = (void*)login + (size_t)login->password;
 
-    // Todo: use a hashmap
-    u32 login_success = true;
-    for (u32 conn_id_index = 0; conn_id_index < conns->used_id_count; conn_id_index++) {
-        u32 id = conns->used_ids[conn_id_index];
-        ClientConnection *conn_it = client_connection_id_to_ptr(conns, id);
-        if (string32_equal(conn_it->username, conn->username)) {
+
+    // verify package
+    if (login->username->len <= 0) {
+        printf("handle_c2s_login error: username len %d is invalid\n", login->username->len);
+    }
+    if (login->username->len > MESSAGES_MAX_USERNAME_LEN) {
+        printf("handle_c2s_login error: username len %d/%d\n", login->username->len, MESSAGES_MAX_USERNAME_LEN);
+        return; // Todo: rm connection
+    }
+    if (login->username->len > MESSAGES_MAX_PASSWORD_LEN) {
+        printf("handle_c2s_login error: password len %d/%d\n", login->password->len, MESSAGES_MAX_PASSWORD_LEN);
+        return; // Todo: rm connection
+    }
+    size_t message_size = sizeof(C2S_Login) + 2*sizeof(String32) + sizeof(u32) * (login->username->len + login->password->len);
+    if (message_size != conn->recv_buff_size_used) {
+        printf("handle_c2s_login error: message size is %zu/%d\n", message_size, conn->recv_buff_size_used);
+        return; // Todo: rm connection
+    }
+
+
+    // temporary check if username already connected (use a hashmap for this)
+    b32 login_success = true;
+    for (size_t i = 0; i < conns->max_connection_count; i++) {
+        ClientConnection *connection = conns->connections + i;
+        if (string32_equal(connection->username, login->username)) {
             login_success = false;
             break;
         }
     }
 
-    if (login_success) {
-        send_s2c_login(conn, S2C_LOGIN_SUCCESS);
-    } else {
+
+    // login
+    for (size_t i = 0; i < login->username->len; i++) {
+        conn->username->codepoints[i] = login->username->codepoints[i];
+    }
+    conn->username->len = login->username->len;
+
+
+    if (!login_success) {
         send_s2c_login(conn, S2C_LOGIN_ERROR);
     }
+
+
+    send_s2c_login(conn, S2C_LOGIN_SUCCESS);
+
+    // send everyone else's user update to conn
+    // Todo: make proper groups
+    for (size_t i = 0; i < conns->max_connection_count; i++) {
+        ClientConnection *connection = conns->connections + i;
+        if (string32_equal(connection->username, conn->username)) {
+            continue;
+        }
+        if (connection->username->len > 0) {
+            send_s2c_user_update(conn, connection->username, S2C_USER_UPDATE_ONLINE);
+        }
+    }
+
+    // send conn's user update to everyone else
+    // Todo: make proper groups
+    for (size_t i = 0; i < conns->max_connection_count; i++) {
+        ClientConnection *connection = conns->connections + i;
+        if (connection->username->len > 0) {
+            send_s2c_user_update(connection, conn->username, S2C_USER_UPDATE_ONLINE);
+        }
+    }
+
+    // Todo: make function string32_printf
+    printf("<");
+    string32_print(conn->username);;
+    printf("> connected to the server\n");
 }
 
 
@@ -57,6 +113,9 @@ handle_c2s(ClientConnections *conns, ClientConnection *conn)
         size_t size_to_recv = sizeof(MessageHeader) - conn->recv_buff_size_used;
         i64 size_recvd = os_net_secure_stream_recv(conn->secure_stream_id, conn->recv_buff + conn->recv_buff_size_used, size_to_recv);
         if (size_recvd < 0) {
+            return false;
+        }
+        else if (size_recvd == 0) {
             return false;
         }
 
@@ -73,6 +132,9 @@ handle_c2s(ClientConnections *conns, ClientConnection *conn)
         size_t size_to_recv = header->size - conn->recv_buff_size_used;
         i64 size_recvd = os_net_secure_stream_recv(conn->secure_stream_id, conn->recv_buff + conn->recv_buff_size_used, size_to_recv);
         if (size_recvd < 0) {
+            return false;
+        }
+        else if (size_recvd == 0) {
             return false;
         }
 

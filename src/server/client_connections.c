@@ -1,11 +1,12 @@
+#include <basic/string32.h>
 #include <basic/basic.h>
 #include <messages/messages.h>
 #include <crypto/rsa.h>
 #include <os/os.h>
 #include <server/client_connections.h>
 #include <server/c2s_handler.h>
+#include <server/s2c_sender.h>
 
-// Todo: use <os/os.h> functions? xd
 #include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -32,7 +33,38 @@ client_connection_rm(ClientConnections *conns, u32 connection_id)
         perror("epoll_ctl<del>:");
     }
 
+    os_net_secure_stream_close(conn->secure_stream_id);
+
+
+    // Todo: use string32_create with a (temporary) arena
+    String32 username;
+    u32 username_codepoints[MESSAGES_MAX_MESSAGE_LEN];
+    for (size_t i = 0; i < conn->username->len; i++) {
+        username_codepoints[i] = conn->username->codepoints[i];
+    }
+    username.len = conn->username->len;
+
+
+    conn->username->len = 0;
     conns->free_ids[conns->free_id_count++] = connection_id;
+
+
+    if (username.len) {
+        // send user updates
+        // Todo: make proper groups
+        for (size_t i = 0; i < conns->max_connection_count; i++) {
+            ClientConnection *connection = conns->connections + i;
+            if (connection->username->len > 0) {
+                send_s2c_user_update(connection, &username, S2C_USER_UPDATE_OFFLINE);
+            }
+        }
+
+
+        // Todo: string32_printf(...)
+        printf("<");
+        string32_print(&username);
+        printf("> disconnected\n");
+    }
 }
 
 
@@ -71,24 +103,36 @@ internal_fn void
 handle_client_event(ClientConnections *conns, struct epoll_event event)
 {
     u32 conn_id = event.data.u32;
-
     ClientConnection *conn = client_connection_id_to_ptr(conns, conn_id);
+
+
+    u32 secure_stream_id = conn->secure_stream_id;
+    OSNetSecureStreamStatus status = os_net_secure_stream_get_status(conn_id);
+    if (status == OS_NET_SECURE_STREAM_ERROR ||
+        status == OS_NET_SECURE_STREAM_DISCONNECTED) {
+        client_connection_rm(conns, conn_id);
+        return;
+    }
+
+
     int fd = os_net_secure_stream_get_fd(conn->secure_stream_id);
 
-    // error states
     if (event.events & EPOLLERR) {
-        client_connection_rm(conns, conn_id);
         printf("EPOLLERR occured for client_id = %d, fd = %d\n", conn_id, fd);
+        client_connection_rm(conns, conn_id);
     }
     else if (event.events & EPOLLHUP) {
-        client_connection_rm(conns, conn_id);
         printf("EPOLLHUP occured for client_id = %d, fd = %d\n", conn_id, fd);
+        client_connection_rm(conns, conn_id);
     }
-    // read state
-    if (event.events & EPOLLIN) {
+    else if (event.events & EPOLLIN) {
         if (!handle_c2s(conns, conn)) {
             return client_connection_rm(conns, conn_id);
         }
+    }
+    else {
+        printf("EPOLL??? (%d) occured for client_id = %d, fd = %d\n", event.events, conn_id, fd);
+        client_connection_rm(conns, conn_id);
     }
 }
 
@@ -139,7 +183,6 @@ client_connections_manage(ClientConnections *conns)
         }
 
         for (size_t i = 0; i < event_count; i++) {
-            // Todo: use a threadpool to deal with these events
             if (events[i].data.u32 == conns->listener_id) {
                 handle_listener_event(conns, events[i]);
             } else {
@@ -186,9 +229,6 @@ client_connections_create(MemArena *arena, u16 port)
     }
 
 
-    conns->used_id_count = 0;
-    conns->used_ids = mem_arena_push(arena, max_user_count * sizeof(*conns->used_ids));
-
     conns->free_id_count = max_user_count;
     conns->free_ids = mem_arena_push(arena, max_user_count * sizeof(*conns->free_ids));
     for (size_t i = 0; i < max_user_count; i++) {
@@ -202,6 +242,7 @@ client_connections_create(MemArena *arena, u16 port)
         return 0;
     }
 
+    s2c_sender_init(arena);
 
     return conns;
 }

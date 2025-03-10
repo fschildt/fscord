@@ -77,24 +77,37 @@ session_draw_chat(Session *session, RectF32 rect)
     V2F32 pos = v2f32(rect.x0 + border_size*4, rect.y0 + border_size*4);
     f32 dy = font->y_advance + border_size * 4;
 
-    size_t cnt1 = session->cur_message_count - session->message0;
-    size_t cnt2 = session->cur_message_count - cnt1;
-    for (size_t i = session->message0; i < cnt1; i++) {
+    if (session->cur_message_count == 0) {
+        return;
+    }
+
+    // Todo: Can we make this cleaner?
+    //       We're only using indices and no counts within loops, which is good.
+    //       But, we're also using size_t for indices which can wrap around 0
+    //       and make conditions less clear.
+    size_t l = (session->message0 + session->cur_message_count - 1) % session->max_message_count;
+    size_t r = MIN(session->message0 + session->cur_message_count - 1, session->max_message_count-1);
+    while (l < session->message0) {
         if (pos.y >= pos.y + dy) {
             break;
         }
-        ChatMessage *message = &session->messages[i];
+        ChatMessage *message = &session->messages[l];
         session_draw_chat_message(message, pos);
         pos.y += dy;
+
+        l--;
     }
-    for (size_t i = 0; i < session->message0; i++) {
+    r++;
+    do {
+        r--;
+
         if (pos.y >= pos.y + dy) {
             break;
         }
-        ChatMessage *message = &session->messages[i];
+        ChatMessage *message = &session->messages[r];
         session_draw_chat_message(message, pos);
         pos.y += dy;
-    }
+    } while (r != session->message0);
 }
 
 internal_fn void
@@ -126,7 +139,7 @@ session_draw_prompt(Session *session, RectF32 rect)
 
 
     // draw cursor
-    pos.x += font_get_width_from_string32_len(font, session->prompt_cursor);
+    pos.x += font_get_width_from_string32_len(font, session->prompt->cursor);
     RectF32 cursor_rect = rectf32(pos.x, pos.y, pos.x + font->x_advance/4.f, pos.y + font->y_advance);
     V3F32 cursor_col = v3f32(0, 0, 0);
     draw_rectf32(screen, cursor_rect, cursor_col);
@@ -221,6 +234,7 @@ session_rm_user(Session *session, String32 *username)
     }
     assert(rm_idx != SIZE_MAX);
 
+    // swap users
     size_t last_idx = session->cur_user_count - 1;
     for (size_t i = rm_idx + 1; i <= last_idx; i++) {
         string32_buffer_copy_string32_buffer(session->users[i-1].name, session->users[i].name);
@@ -250,7 +264,6 @@ session_process_event(Session *session, OSEvent *event)
             String32 *trans_prompt = string32_buffer_to_string32(trans_arena, session->prompt);
             send_c2s_chat_message(trans_prompt);
             string32_buffer_reset(session->prompt);
-            session->prompt_cursor = 0;
         }
         else {
             string32_buffer_edit(session->prompt, event->key_press);
@@ -259,7 +272,7 @@ session_process_event(Session *session, OSEvent *event)
     break;
 
     default: {
-        printf("ui_udpate_session did not process an event\n");
+        printf("ui_update_session did not process an event\n");
     }
     }
 }
@@ -298,7 +311,7 @@ session_create(MemArena *arena, struct Fscord *fscord)
         session->messages[i].content = string32_buffer_create(arena, MESSAGES_MAX_MESSAGE_LEN);
     }
 
-    session->prompt = string32_buffer_create(arena, 1024);
+    session->prompt = string32_buffer_create(arena, MESSAGES_MAX_MESSAGE_LEN);
 
     s_fscord = fscord;
 

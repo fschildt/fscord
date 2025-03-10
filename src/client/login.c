@@ -62,20 +62,40 @@ login_draw(Login *login)
 
 
     V2F32 curr_pos = widgets_pos;
+    f32 cursor_y; // Todo: draw UiInputText or something or draw_string32_buffer straight
 
     draw_string32(offscreen, curr_pos, string32_value(login->warning), font);
     curr_pos.y += font_height * 3;
 
     draw_string32(offscreen, curr_pos, trans_username, font);
+    if (login->is_username_active) {
+        cursor_y = curr_pos.y;
+    }
     curr_pos.y += font_height * 1.4;
 
     draw_string32(offscreen, curr_pos, string32_value(SH_LOGIN_USERNAME_HINT), font);
     curr_pos.y += font_height * 2.4;
 
     draw_string32(offscreen, curr_pos, trans_servername, font);
+    if (!login->is_username_active) {
+        cursor_y = curr_pos.y;
+    }
     curr_pos.y += font_height * 1.4;
 
     draw_string32(offscreen, curr_pos, string32_value(SH_LOGIN_SERVERNAME_HINT), font);
+
+
+    // draw cursor
+    V2F32 cursor_pos = v2f32(curr_pos.x, cursor_y);
+    if (login->is_username_active) {
+        cursor_pos.x += font_get_width_from_string32_len(font, login->username->cursor);
+    }
+    else {
+        cursor_pos.x += font_get_width_from_string32_len(font, login->servername->cursor);
+    }
+    RectF32 cursor_rect = rectf32(cursor_pos.x, cursor_pos.y, cursor_pos.x + font->x_advance/4.f, cursor_pos.y + font->y_advance);
+    V3F32 cursor_col = v3f32(0, 0, 0);
+    draw_rectf32(offscreen, cursor_rect, cursor_col);
 }
 
 
@@ -155,15 +175,15 @@ login_process_special_key_press(Login *login, OSKeyPress key_press)
 }
 
 void
-login_process_login_result(Login *login, b32 success)
+login_process_login_result(Login *login, u32 result)
 {
     assert(login->is_trying_to_login);
 
-    if (success) {
+    if (result == S2C_LOGIN_SUCCESS) {
         s_fscord->is_logged_in = true;
     }
     else {
-        login->warning = SH_LOGIN_WARNING_COULD_NOT_CONNECT;
+        login->warning = SH_LOGIN_WARNING_COULD_NOT_CONNECT; // Todo: "could not login"
     }
 
     login->is_trying_to_login = false;
@@ -291,7 +311,9 @@ login_create(MemArena *arena, Fscord *fscord)
 
     #if !defined(NDEBUG)
     string32_buffer_append_ascii_cstr(login->username, "user_a");
+    login->username->cursor = login->username->len;
     string32_buffer_append_ascii_cstr(login->servername, "127.0.0.1:1905");
+    login->servername->cursor = login->servername->len;
     #endif
 
     return login;

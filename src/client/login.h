@@ -12,8 +12,8 @@ struct Fscord;
 typedef struct {
     b32 is_username_active;
 
-    b32 is_trying_to_login;
-    b32 is_c2s_login_sent;
+    b16 is_trying_to_login;
+    b16 is_c2s_login_sent;
 
     String32Buffer *username;
     String32Buffer *servername;

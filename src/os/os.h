@@ -97,8 +97,10 @@ void               os_window_swap_buffers(OSWindow *window, OSOffscreenBuffer *o
 
 
 typedef enum {
-    OS_NET_SECURE_STREAM_CONNECTED,
+    OS_NET_SECURE_STREAM_ERROR,
     OS_NET_SECURE_STREAM_DISCONNECTED,
+
+    OS_NET_SECURE_STREAM_CONNECTED,
     OS_NET_SECURE_STREAM_HANDSHAKING,
 } OSNetSecureStreamStatus;
 
@@ -111,10 +113,12 @@ u32  os_net_secure_stream_accept(u32 listener_id);
 u32  os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub);
 void os_net_secure_stream_close(u32 id);
 
-b32  os_net_secure_stream_send(u32 id, void *buffer, size_t size);
+OSNetSecureStreamStatus os_net_secure_stream_get_status(u32 id);
+i64  os_net_secure_stream_error(u32 id); // 0 if no error, else tbd
+
+i64  os_net_secure_stream_send(u32 id, void *buffer, size_t size);
 i64  os_net_secure_stream_recv(u32 id, void *buffer, size_t size);
 int  os_net_secure_stream_get_fd(u32 id);
-OSNetSecureStreamStatus os_net_secure_stream_get_status(u32 id);
 
 
 

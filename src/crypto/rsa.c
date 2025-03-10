@@ -85,7 +85,6 @@ rsa_decrypt(EVP_PKEY *key, void *dest, void *src, size_t dest_size)
         return false;
     }
 
-    printf("rsa decrypted %d ciphertext-bytes to %zu plaintext-bytes\n", 512, decrypted_len);
     EVP_PKEY_CTX_free(ctx);
     return true;
 }
@@ -140,7 +139,6 @@ rsa_encrypt(EVP_PKEY *key, void *dest, void *src, size_t src_size)
         return false;
     }
 
-    printf("rsa encrypted %zu plaintext-bytes to %zu ciphertext-bytes\n", src_size, output_len);
     EVP_PKEY_CTX_free(ctx);
     return true;
 }

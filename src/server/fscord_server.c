@@ -63,7 +63,6 @@ main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-
     ClientConnections *client_connections = client_connections_create(&arena, args.port);
     if (!client_connections) {
         return EXIT_FAILURE;

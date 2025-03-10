@@ -14,25 +14,45 @@ typedef struct Fscord Fscord;
 internal_fn b32
 fscord_update(Fscord *fscord)
 {
+    mem_arena_reset(&fscord->trans_arena);
+
+
     OSOffscreenBuffer *offscreen_buffer = fscord->offscreen_buffer;
     Login *login = fscord->login;
     Session *session = fscord->session;
 
 
-    // handle special case for login attempt
-    if (login->is_trying_to_login) {
-        login_update_login_attempt(login);
-    }
-
-
     // handle network events
+    // Todo: Do this more carefully.
     ServerConnectionStatus status = server_connection_get_status();
-    if (status == SERVER_CONNECTION_ESTABLISHED) {
+    if (status == SERVER_CONNECTION_NOT_ESTABLISHED) {
+        if (fscord->is_logged_in) {
+            fscord->is_logged_in = false;
+            session_reset(session);
+        }
+        if (login->is_trying_to_login) {
+            login->warning = SH_LOGIN_WARNING_COULD_NOT_CONNECT;
+            login->is_trying_to_login = false;
+        }
+    }
+    else if (status == SERVER_CONNECTION_ESTABLISHED) {
+        if (!fscord->is_logged_in && login->is_trying_to_login) {
+            login_update_login_attempt(login);
+        }
+
         b32 handled = server_connection_handle_events();
         if (!handled) {
-            server_connection_terminate();
             fscord->is_logged_in = false;
+            session_reset(session);
+            server_connection_terminate();
+            login->warning = SH_LOGIN_WARNING_CONNECTION_LOST;
         }
+    }
+    else if (status == SERVER_CONNECTION_ESTABLISHING) {
+        // do nothing
+    }
+    else {
+        InvalidCodePath;
     }
 
 
@@ -68,7 +88,6 @@ fscord_update(Fscord *fscord)
     play_sound_update(&fscord->ps_user_disconnected, sound_buffer);
 #endif
 
-    mem_arena_reset(&fscord->trans_arena);
 
     return true;
 }

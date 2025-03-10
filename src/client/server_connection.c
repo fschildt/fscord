@@ -8,7 +8,6 @@
 
 #include <poll.h> // Todo: use os/os.h
 
-// Todo: security checks on the individual c2s buffers after they are recvd.
 
 typedef struct {
     volatile ServerConnectionStatus status;
@@ -21,8 +20,8 @@ typedef struct {
     MemArena send_arena;
     u8 send_arena_mem[MESSAGES_MAX_PACKAGE_SIZE];
 
-    size_t recv_buff[MESSAGES_MAX_PACKAGE_SIZE];
-    u8 recv_buff_size_used;
+    size_t recv_buff_size_used;
+    u8 recv_buff[MESSAGES_MAX_PACKAGE_SIZE];
 } ServerConnection;
 
 
@@ -45,7 +44,11 @@ send_c2s_chat_message(String32 *content)
     chat_message->header.size = send_arena->size_used;
 
 
-    os_net_secure_stream_send(s_conn.secure_stream_id, send_arena->memory, send_arena->size_used);
+    i64 size_sent = os_net_secure_stream_send(s_conn.secure_stream_id, send_arena->memory, send_arena->size_used);
+    if (size_sent < 0) {
+        server_connection_terminate();
+    }
+
     mem_arena_reset(send_arena);
 }
 
@@ -68,7 +71,11 @@ send_c2s_login(String32 *username, String32 *password)
     login->header.size = send_arena->size_used;
 
 
-    os_net_secure_stream_send(s_conn.secure_stream_id, send_arena->memory, send_arena->size_used);
+    i64 size_sent = os_net_secure_stream_send(s_conn.secure_stream_id, send_arena->memory, send_arena->size_used);
+    if (size_sent < 0) {
+        server_connection_terminate();
+    }
+
     mem_arena_reset(send_arena);
 }
 
@@ -103,10 +110,10 @@ handle_s2c_chat_message()
 internal_fn void
 handle_s2c_login()
 {
-    S2C_Login *login_response = (S2C_Login*)&s_conn.recv_buff;
+    S2C_Login *login_response = (S2C_Login*)s_conn.recv_buff;
 
     Login *login = s_fscord->login;
-    login_process_login_result(login, login_response->login_result == S2C_LOGIN_SUCCESS);
+    login_process_login_result(login, login_response->login_result);
 }
 
 
@@ -117,7 +124,7 @@ handle_s2c()
     i64 size_recvd;
     i64 size_to_recv;
 
-    // recv MessageHeader
+    // recv message header
     if (s_conn.recv_buff_size_used < sizeof(MessageHeader)) {
         size_to_recv = sizeof(MessageHeader) - s_conn.recv_buff_size_used;
         size_recvd = os_net_secure_stream_recv(s_conn.secure_stream_id, s_conn.recv_buff + s_conn.recv_buff_size_used, size_to_recv);
@@ -133,10 +140,10 @@ handle_s2c()
     }
 
 
-    // recv Message body
+    // recv message body
     MessageHeader *header = (MessageHeader*)s_conn.recv_buff;
     if (s_conn.recv_buff_size_used < header->size) {
-        size_to_recv = s_conn.recv_buff_size_used - header->size;
+        size_to_recv = header->size - s_conn.recv_buff_size_used;
         size_recvd = os_net_secure_stream_recv(s_conn.secure_stream_id, s_conn.recv_buff + s_conn.recv_buff_size_used, size_to_recv);
         if (size_recvd < 0) {
             printf("handle_s2c error: size_recvd < 0 when recv'ing message body\n");
@@ -168,12 +175,18 @@ handle_s2c()
 b32
 server_connection_handle_events()
 {
-    // Todo: USE OS/OS.h FUNCTIONALITY!!!
+    // Todo: use <os/os.h> functions!
     struct pollfd pollfd;
     pollfd.fd = os_net_secure_stream_get_fd(s_conn.secure_stream_id);
     pollfd.events = POLLIN;
 
     for (;;) {
+        OSNetSecureStreamStatus status = os_net_secure_stream_get_status(s_conn.secure_stream_id);
+        if (status == OS_NET_SECURE_STREAM_DISCONNECTED ||
+            status == OS_NET_SECURE_STREAM_ERROR) {
+            return false;
+        }
+
         int ret = poll(&pollfd, 1, 0);
         if (ret == -1) {
             printf("poll error\n");
@@ -183,7 +196,7 @@ server_connection_handle_events()
             return true; // do nothing
         }
 
-        if (pollfd.revents & (POLLERR)) {
+        if (pollfd.revents & POLLERR) {
             printf("poll POLLERR\n");
             return false; // Todo: handle err
         }

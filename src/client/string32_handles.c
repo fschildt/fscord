@@ -34,8 +34,7 @@ string32_handles_load_language()
     string32_values[SH_LOGIN_WARNING_SERVERNAME_INVALID] = string32_create_from_ascii(&arena, "error: servername is invalid.");
     string32_values[SH_LOGIN_WARNING_CONNECTING] = string32_create_from_ascii(&arena, "connecting...");
     string32_values[SH_LOGIN_WARNING_COULD_NOT_CONNECT] = string32_create_from_ascii(&arena, "error: could not connect");
-
-    printf("string32_handles_load_language size = %lu/%lu\n", arena.size_used, arena.size_max);
+    string32_values[SH_LOGIN_WARNING_CONNECTION_LOST] = string32_create_from_ascii(&arena, "error: connection lost");
 }
 
 
