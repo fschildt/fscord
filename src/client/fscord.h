@@ -3,7 +3,6 @@
 
 #include <os/os.h>
 #include <basic/time.h>
-#include <client/userlist.h>
 #include <client/chat.h>
 #include <client/sound.h>
 #include <client/asset_manager.h>
