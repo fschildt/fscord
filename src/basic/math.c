@@ -44,7 +44,7 @@ v2f32_sub(V2F32 v1, V2F32 v2)
 V2F32
 v2f32_center(V2F32 dim_inner, V2F32 dim_outer)
 {
-    V2F32 pos = {};
+    V2F32 pos;
     pos.x = f32_center(dim_inner.x, dim_outer.x);
     pos.y = f32_center(dim_inner.y, dim_outer.y);
     return pos;

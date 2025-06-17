@@ -40,7 +40,7 @@ aes_gcm_iv_advance(AesGcmIv *iv)
 
 b32
 aes_gcm_decrypt(AesGcmKey *key, AesGcmIv *iv,
-                void *plaintext, void *ciphertext, i32 ciphertext_len,
+                u8 *plaintext, u8 *ciphertext, i32 ciphertext_len,
                 u8 *tag, i32 tag_len)
 {
     EVP_CIPHER_CTX *ctx;
@@ -105,7 +105,7 @@ aes_gcm_decrypt(AesGcmKey *key, AesGcmIv *iv,
 
 b32
 aes_gcm_encrypt(AesGcmKey *key, AesGcmIv *iv,
-                void *ciphertext, void *plaintext, i32 plaintext_len,
+                u8 *ciphertext, u8 *plaintext, i32 plaintext_len,
                 u8 *tag_out, i32 tag_out_len)
 {
     EVP_CIPHER_CTX *ctx;

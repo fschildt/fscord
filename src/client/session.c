@@ -194,7 +194,6 @@ session_draw(Session *session)
     OSOffscreenBuffer *screen = s_fscord->offscreen_buffer;
 
     f32 left_width = screen->width * 0.3;
-    f32 right_width = screen->width - left_width;
     f32 prompt_height = screen->height * 0.1; // Todo: ui_textbox_get_height(...)
 
     RectF32 users_rect = rectf32(0, 0, left_width, screen->height);
@@ -259,14 +258,14 @@ session_process_event(Session *session, OSEvent *event)
 
     switch (event->type) {
     case OS_EVENT_KEY_PRESS: {
-        u32 codepoint = event->key_press.code;
+        u32 codepoint = event->ev.key_press.code;
         if (codepoint == '\r') {
             String32 *trans_prompt = string32_buffer_to_string32(trans_arena, session->prompt);
             send_c2s_chat_message(trans_prompt);
             string32_buffer_reset(session->prompt);
         }
         else {
-            string32_buffer_edit(session->prompt, event->key_press);
+            string32_buffer_edit(session->prompt, event->ev.key_press);
         }
     }
     break;

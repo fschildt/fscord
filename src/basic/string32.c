@@ -86,7 +86,7 @@ string32_buffer_insert(String32Buffer *buffer, u32 codepoint)
 
 
 void
-string32_buffer_edit(String32Buffer *buffer, OSKeyPress key_press)
+string32_buffer_edit(String32Buffer *buffer, OSEventKeyPress key_press)
 {
     if (key_press.is_unicode) {
         switch (key_press.code) {
@@ -280,7 +280,7 @@ String32 *
 string32_create_from_u32_array(MemArena *arena, u32 *buffer, size_t len)
 {
     size_t push_size = sizeof(String32) + len * sizeof(u32);
-    String32 *result = mem_arena_push(arena, sizeof(String32));
+    String32 *result = mem_arena_push(arena, push_size);
 
     memcpy(result->codepoints, buffer, len);
     result->len = len;

@@ -6,6 +6,7 @@
 #include <GL/gl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 struct OSWindow {
@@ -27,7 +28,7 @@ struct OSWindow {
 internal_var Display *g_display;
 
 internal_fn b32
-os_connect_to_x()
+os_connect_to_x(void)
 {
     const char *display_name = 0;
     g_display = XOpenDisplay(display_name);
@@ -105,13 +106,13 @@ os_window_swap_buffers(OSWindow *window, OSOffscreenBuffer *offscreen_buffer)
 
 #define ADD_KEY_PRESS(c) \
     event->type = OS_EVENT_KEY_PRESS; \
-    event->key_press.code = c; \
-    event->key_press.is_unicode = true; \
+    event->ev.key_press.code = c; \
+    event->ev.key_press.is_unicode = true; \
     return true;
 #define ADD_SPECIAL_KEY_PRESS(c) \
     event->type = OS_EVENT_KEY_PRESS; \
-    event->key_press.code = c; \
-    event->key_press.is_unicode = false; \
+    event->ev.key_press.code = c; \
+    event->ev.key_press.is_unicode = false; \
     return true;
 
 b32
@@ -147,8 +148,8 @@ os_window_get_event(OSWindow *window, OSEvent *event)
                 i32 height = xevent.xconfigure.height;
                 if (width != window->width || height != window->height) {
                     event->type = OS_EVENT_WINDOW_RESIZE;
-                    event->width = width;
-                    event->height = height;
+                    event->ev.resize.width = width;
+                    event->ev.resize.height = height;
                     window->width = width;
                     window->height = height;
                     return true;
@@ -242,7 +243,8 @@ OSWindow *os_window_create(const char *name, i32 width, i32 height) {
     long swa_event_mask = PropertyChangeMask | SubstructureNotifyMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask;
     Colormap colormap = XCreateColormap(g_display, root_window_id, vinfo->visual, AllocNone);
 
-    XSetWindowAttributes swa = {};
+    XSetWindowAttributes swa;
+    memset(&swa, 0, sizeof(swa));
     swa.background_pixmap = None;
     swa.border_pixel = 0;
     swa.event_mask = swa_event_mask;

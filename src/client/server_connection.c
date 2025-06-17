@@ -81,7 +81,7 @@ send_c2s_login(String32 *username, String32 *password)
 
 
 internal_fn void
-handle_s2c_user_update()
+handle_s2c_user_update(void)
 {
     S2C_UserUpdate *user_update = (S2C_UserUpdate*)s_conn.recv_buff;
     user_update->username = (String32*)((u8*)user_update + (size_t)user_update->username);
@@ -95,7 +95,7 @@ handle_s2c_user_update()
 
 
 internal_fn void
-handle_s2c_chat_message()
+handle_s2c_chat_message(void)
 {
     S2C_ChatMessage *chat_message = (S2C_ChatMessage*)s_conn.recv_buff;
     chat_message->username = (String32*)((u8*)chat_message + (size_t)chat_message->username);
@@ -108,7 +108,7 @@ handle_s2c_chat_message()
 
 
 internal_fn void
-handle_s2c_login()
+handle_s2c_login(void)
 {
     S2C_Login *login_response = (S2C_Login*)s_conn.recv_buff;
 
@@ -119,7 +119,7 @@ handle_s2c_login()
 
 // Todo: security checks on the message size.
 internal_fn b32
-handle_s2c()
+handle_s2c(void)
 {
     i64 size_recvd;
     i64 size_to_recv;
@@ -173,7 +173,7 @@ handle_s2c()
 
 
 b32
-server_connection_handle_events()
+server_connection_handle_events(void)
 {
     // Todo: use <os/os.h> functions!
     struct pollfd pollfd;
@@ -219,7 +219,7 @@ server_connection_handle_events()
 
 
 void
-server_connection_terminate()
+server_connection_terminate(void)
 {
     os_net_secure_stream_close(s_conn.secure_stream_id);
     s_conn.secure_stream_id = OS_NET_SECURE_STREAM_ID_INVALID;
@@ -272,7 +272,7 @@ server_connection_establish(char *address, u16 port, EVP_PKEY *server_rsa_pub)
 
 
 ServerConnectionStatus
-server_connection_get_status()
+server_connection_get_status(void)
 {
     return s_conn.status;
 }

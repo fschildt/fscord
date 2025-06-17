@@ -3,19 +3,16 @@
 
 #include <basic/basic.h>
 
-typedef union V2F32 {
-    struct {f32 x; f32 y;};
-    struct {f32 w; f32 h;};
+typedef struct {
+    f32 x, y;
 } V2F32;
 
-typedef union V3F32 {
-    struct {f32 x; f32 y; f32 z;};
-    struct {f32 r; f32 g; f32 b;};
+typedef struct {
+    f32 x, y, z;
 } V3F32;
 
-typedef union V4F32 {
-    struct {f32 x; f32 y; f32 z; f32 w;};
-    struct {f32 r; f32 g; f32 b; f32 a;};
+typedef struct {
+    f32 x, y, z, w;
 } V4F32;
 
 typedef struct {

@@ -60,7 +60,7 @@ fscord_update(Fscord *fscord)
     OSEvent event;
     while (os_window_get_event(fscord->window, &event)) {
         if (event.type == OS_EVENT_WINDOW_RESIZE) {
-            os_offscreen_buffer_resize(offscreen_buffer, event.width, event.height);
+            os_offscreen_buffer_resize(offscreen_buffer, event.ev.resize.width, event.ev.resize.height);
             continue;
         }
         if (event.type == OS_EVENT_WINDOW_DESTROYED) {
@@ -107,9 +107,9 @@ fscord_main(Fscord *fscord)
 
 
 internal_fn Fscord *
-fscord_create(void *memory, size_t memory_size)
+fscord_create(u8 *memory, size_t memory_size)
 {
-    Fscord *fscord = memory;
+    Fscord *fscord = (Fscord*)memory;
     memory += sizeof(*fscord);
     memory_size -= sizeof(*fscord);
 
@@ -121,7 +121,7 @@ fscord_create(void *memory, size_t memory_size)
     memory_size -= arena_size;
 
     MemArena *trans_arena = &fscord->trans_arena;
-    mem_arena_init(&fscord->trans_arena, memory, memory_size); // take the rest of memory
+    mem_arena_init(trans_arena, memory, memory_size); // take the rest of memory
 
 
     string32_handles_create(arena);

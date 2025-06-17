@@ -7,7 +7,7 @@
 typedef struct {
     size_t size_used;
     size_t size_max;
-    void *memory;
+    u8 *memory;
 } MemArena;
 
 void mem_arena_init(MemArena *arena, void *memory, size_t size);

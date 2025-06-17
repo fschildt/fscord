@@ -8,9 +8,9 @@ typedef struct {
     i32 width;
     i32 height;
     union {
-        uint32_t *pixels;
-        uint8_t *alphas;
-    };
+        uint32_t *rgba;
+        uint8_t *grayscale;
+    } data;
 } Bitmap;
 
 typedef struct {

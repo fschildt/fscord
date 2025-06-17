@@ -63328,3 +63328,4 @@ static u8 g_asset_sound_user_connected[] = {
 	 22,254,173,253,
 	 68,253, 16,253,
 };
+

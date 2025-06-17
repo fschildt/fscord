@@ -33,7 +33,6 @@ struct OSSoundPlayer {
     } \
 }
 
-
 internal_fn void
 os_list_sound_devices(void)
 {

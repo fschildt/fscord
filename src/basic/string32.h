@@ -49,7 +49,7 @@ b32     string32_buffer_equal_string32(String32Buffer *buffer, String32 *str);
 void    string32_buffer_copy_string32(String32Buffer *buffer, String32 *str);
 void    string32_buffer_copy_string32_buffer(String32Buffer *dest, String32Buffer *src);
 
-void    string32_buffer_edit(String32Buffer *buffer, OSKeyPress key_press);
+void    string32_buffer_edit(String32Buffer *buffer, OSEventKeyPress key_press);
 b32     string32_buffer_insert(String32Buffer *buffer, u32 codepoint);
 b32     string32_buffer_delete_right(String32Buffer *buffer);
 b32     string32_buffer_delete_left(String32Buffer *buffer);

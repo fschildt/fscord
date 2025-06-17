@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <basic/basic.h>
 #include <basic/mem_arena.h>
 

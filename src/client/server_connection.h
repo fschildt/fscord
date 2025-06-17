@@ -16,10 +16,10 @@ typedef enum {
 
 void server_connection_create(MemArena *arena, struct Fscord *fscord);
 
-ServerConnectionStatus server_connection_get_status();
+ServerConnectionStatus server_connection_get_status(void);
 void server_connection_establish(char *address, u16 port, EVP_PKEY *server_rsa_pub);
-void server_connection_terminate();
-b32  server_connection_handle_events();
+void server_connection_terminate(void);
+b32  server_connection_handle_events(void);
 
 void send_c2s_login(String32 *username, String32 *password);
 void send_c2s_chat_message(String32 *content);

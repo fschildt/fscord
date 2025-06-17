@@ -20,7 +20,7 @@ string32_value(String32Handle handle)
 
 
 void
-string32_handles_load_language()
+string32_handles_load_language(void)
 {
     // Todo: read these from files.
 

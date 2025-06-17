@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_C_COMPILER "clang")
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 set(FSCORD_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
 set(FSCORD_INC_DIR  "${FSCORD_ROOT_DIR}/src")
 set(FSCORD_SRC_DIR  "${FSCORD_ROOT_DIR}/src")
@@ -12,7 +15,9 @@ project(fscord)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../data/fscord)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../data/fscord)
 add_executable(fscord)
-set_property(TARGET fscord PROPERTY C_STANDARD 99)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(fscord PRIVATE -Wall -pedantic-errors)
+endif()
 target_sources(fscord PUBLIC
     ${FSCORD_SRC_DIR}/basic/mem_arena.c
     ${FSCORD_SRC_DIR}/basic/math.c
@@ -42,6 +47,9 @@ target_link_libraries(fscord X11 GL asound ssl crypto)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../data/fscord_server)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../data/fscord_server)
 add_executable(fscord_server)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(fscord PRIVATE -Wall -pedantic-errors)
+endif()
 set_property(TARGET fscord_server PROPERTY C_STANDARD 99)
 target_sources(fscord_server PUBLIC
     ${FSCORD_SRC_DIR}/basic/mem_arena.c

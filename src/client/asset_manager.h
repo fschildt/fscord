@@ -6,7 +6,7 @@
 #include <client/font.h>
 #include <client/sound.h>
 
-Font *asset_manager_load_font();
+Font *asset_manager_load_font(void);
 Sound *asset_manager_load_sound(i32 id);
 
 

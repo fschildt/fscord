@@ -28,9 +28,9 @@ void draw_rectf32(OSOffscreenBuffer *offscreen, RectF32 rect, V3F32 color)
     for (i32 y = ymin; y <= ymax; y++) {
         u32 *pixel = offscreen->pixels + y * offscreen->width + xmin;
         for (i32 x = xmin; x <= xmax; x++) {
-            f32 r = color.r * 255.0;
-            f32 g = color.g * 255.0;
-            f32 b = color.b * 255.0;
+            f32 r = color.x * 255.0;
+            f32 g = color.y * 255.0;
+            f32 b = color.z * 255.0;
             u32 val = (u32)r << rshift | (u32)g << gshift | (u32)b << bshift;
             *pixel++ = val;
         }
@@ -67,11 +67,11 @@ void draw_mono_bitmap(OSOffscreenBuffer *screen, V2F32 pos, Bitmap *bitmap, V3F3
     u8 gshift = screen->green_shift;
     u8 bshift = screen->blue_shift;
 
-    u8 *alphas = bitmap->alphas + (-cut_bot * bitmap->width) + (-cut_left);
-    u32 *pixels = screen->pixels + y0 * screen->width + x0;
+    u8 *grayscale = bitmap->data.grayscale + (-cut_bot * bitmap->width) + (-cut_left);
+    u32 *rgba = screen->pixels + y0 * screen->width + x0;
     for (i32 y = y0; y <= y1; y++) {
-        u8 *alpha_row = alphas;
-        u32 *pixel_row = pixels;
+        u8 *alpha_row = grayscale;
+        u32 *pixel_row = rgba;
         for (i32 x = x0; x <= x1; x++) {
             f32 alpha = *alpha_row++ / 255.0;
 
@@ -80,15 +80,15 @@ void draw_mono_bitmap(OSOffscreenBuffer *screen, V2F32 pos, Bitmap *bitmap, V3F3
             f32 g0 = (pixel >> gshift) & 0xff;
             f32 b0 = (pixel >> bshift) & 0xff;
 
-            f32 r1 = r0 + (color.r - r0)*alpha;
-            f32 g1 = g0 + (color.g - g0)*alpha;
-            f32 b1 = b0 + (color.b - b0)*alpha;
+            f32 r1 = r0 + (color.x - r0)*alpha;
+            f32 g1 = g0 + (color.y - g0)*alpha;
+            f32 b1 = b0 + (color.z - b0)*alpha;
 
             pixel = (u32)b1 << bshift | (u32)g1 << gshift | (u32)r1 << rshift;
             *pixel_row++ = pixel;
         }
-        alphas += bitmap->width;
-        pixels += screen->width;
+        grayscale += bitmap->width;
+        rgba += screen->width;
     }
 }
 

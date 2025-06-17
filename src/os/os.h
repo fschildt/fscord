@@ -7,7 +7,7 @@
 
 typedef struct {
     size_t size;
-    void *p;
+    u8 *p;
 } OSMemory;
 
 b32  os_memory_allocate(OSMemory *memory, size_t size);
@@ -19,7 +19,7 @@ typedef struct {
     i64 nanoseconds;
 } OSTime;
 
-OSTime os_time_get_now();
+OSTime os_time_get_now(void);
 
 
 typedef void OSLibrary;
@@ -43,30 +43,30 @@ typedef enum {
     OS_KEYCODE_RIGHT,
     OS_KEYCODE_UP,
     OS_KEYCODE_DOWN,
-} OSKeySpecial;
+} OSEventKeySpecial;
 
-typedef struct OSKeyPress {
+typedef struct {
     b32 is_unicode; // else it's "special", see OSKeySpecial
     u32 code;   // unicode character or some other keyboard keys
-} OSKeyPress;
+} OSEventKeyPress;
 
-typedef struct OSKeyRelease {
+typedef struct {
     b32 is_special;
     u32 code;   // unicode character or some other keyboard keys
-} OSKeyRelease;
+} OSEventKeyRelease;
+
+typedef struct {
+    i32 width;
+    i32 height;
+} OSEventResize;
 
 typedef struct OSEvent {
     OSEventType type;
     union {
-        OSKeyPress key_press;
-        OSKeyRelease key_release;
-
-        // resize
-        struct {
-            i32 width;
-            i32 height;
-        };
-    };
+        OSEventKeyPress key_press;
+        OSEventKeyRelease key_release;
+        OSEventResize resize;
+    } ev;
 } OSEvent;
 
 
@@ -116,8 +116,8 @@ void os_net_secure_stream_close(u32 id);
 OSNetSecureStreamStatus os_net_secure_stream_get_status(u32 id);
 i64  os_net_secure_stream_error(u32 id); // 0 if no error, else tbd
 
-i64  os_net_secure_stream_send(u32 id, void *buffer, size_t size);
-i64  os_net_secure_stream_recv(u32 id, void *buffer, size_t size);
+i64  os_net_secure_stream_send(u32 id, u8 *buffer, size_t size);
+i64  os_net_secure_stream_recv(u32 id, u8 *buffer, size_t size);
 int  os_net_secure_stream_get_fd(u32 id);
 
 

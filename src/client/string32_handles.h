@@ -17,7 +17,7 @@ typedef enum {
 } String32Handle;
 
 void string32_handles_create(MemArena *arena);
-void string32_handles_load_language();
+void string32_handles_load_language(void);
 String32* string32_value(String32Handle handle);
 
 #endif // STRING_HANDLES_H

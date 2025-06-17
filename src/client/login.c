@@ -51,10 +51,10 @@ login_draw(Login *login)
 
     f32 font_height = font_get_height_from_string32(font);
     V2F32 widgets_size = v2f32(font_get_width_from_string32_len(font, 32), font_height*8);
-    V2F32 widgets_gap = v2f32((widgets_bg_size.w - widgets_size.w) / 2,
-                              (widgets_bg_size.h - widgets_size.h) / 2);
-    V2F32 widgets_pos = v2f32(widgets_bg_pos.x + widgets_gap.w,
-                              widgets_bg_pos.y + widgets_gap.h);
+    V2F32 widgets_gap = v2f32((widgets_bg_size.x - widgets_size.x) / 2,
+                              (widgets_bg_size.y - widgets_size.y) / 2);
+    V2F32 widgets_pos = v2f32(widgets_bg_pos.x + widgets_gap.x,
+                              widgets_bg_pos.y + widgets_gap.y);
 
 
     String32 *trans_servername = string32_buffer_to_string32(trans_arena, login->servername);
@@ -152,7 +152,7 @@ parse_servername(String32Buffer *servername, char *address, size_t address_size,
 }
 
 internal_fn void
-login_process_special_key_press(Login *login, OSKeyPress key_press)
+login_process_special_key_press(Login *login, OSEventKeyPress key_press)
 {
     String32Buffer *buffer;
     if (login->is_username_active) {
@@ -217,7 +217,7 @@ login_update_login_attempt(Login *login)
 }
 
 internal_fn void
-login_process_unicode_key_press(Login *login, OSKeyPress key_press)
+login_process_unicode_key_press(Login *login, OSEventKeyPress key_press)
 {
     switch (key_press.code) {
         case '\t': {
@@ -273,7 +273,7 @@ login_process_unicode_key_press(Login *login, OSKeyPress key_press)
 }
 
 internal_fn void
-login_process_key_press(Login *login, OSKeyPress key_press)
+login_process_key_press(Login *login, OSEventKeyPress key_press)
 {
     login->warning = SH_EMPTY;
 
@@ -292,7 +292,7 @@ login_process_event(Login *login, OSEvent *event)
     }
 
     if (event->type == OS_EVENT_KEY_PRESS) {
-        login_process_key_press(login, event->key_press);
+        login_process_key_press(login, event->ev.key_press);
     }
 }
 

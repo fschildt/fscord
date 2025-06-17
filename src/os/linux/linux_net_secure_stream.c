@@ -158,7 +158,7 @@ recv_and_decrypt_aes_package(OSNetSecureStream *secure_stream)
 
 
 i64
-os_net_secure_stream_recv(u32 id, void *buff, size_t size)
+os_net_secure_stream_recv(u32 id, u8 *buff, size_t size)
 {
     OSNetSecureStream *secure_stream = &s_secure_streams[id];
     if (secure_stream->status != OS_NET_SECURE_STREAM_CONNECTED) {
@@ -169,8 +169,8 @@ os_net_secure_stream_recv(u32 id, void *buff, size_t size)
     while (size_delivered < size) {
         size_t plaintext_size_avail = secure_stream->recv_plaintext_size_filled - secure_stream->recv_plaintext_size_processed;
         if (plaintext_size_avail > 0) {
-            void *src = secure_stream->recv_plaintext + secure_stream->recv_plaintext_size_processed;
-            void *dest = buff + size_delivered;
+            u8 *src = secure_stream->recv_plaintext + secure_stream->recv_plaintext_size_processed;
+            u8 *dest = buff + size_delivered;
             size_t size_to_copy = MIN(size, plaintext_size_avail);
             memcpy(dest, src, size_to_copy);
             secure_stream->recv_plaintext_size_processed += size_to_copy;
@@ -193,7 +193,7 @@ os_net_secure_stream_recv(u32 id, void *buff, size_t size)
 }
 
 i64
-os_net_secure_stream_send(u32 id, void *buff, size_t size)
+os_net_secure_stream_send(u32 id, u8 *buff, size_t size)
 {
     OSNetSecureStream *secure_stream = &s_secure_streams[id];
     if (secure_stream->status != OS_NET_SECURE_STREAM_CONNECTED) {
@@ -251,7 +251,7 @@ os_net_secure_stream_free(u32 id)
 
 
 internal_fn u32
-os_net_secure_stream_alloc()
+os_net_secure_stream_alloc(void)
 {
     assert(s_free_id_count > 0);
     if (s_free_id_count == 0) {
@@ -398,7 +398,7 @@ os_net_secure_stream_accept(u32 listener_id)
     // encrypt aes response
     if (!aes_gcm_encrypt(&secure_stream->send_aes_key,
                          &secure_stream->send_aes_iv,
-                         secure_stream->send_ciphertext + sizeof(*aes_header), &sm_handshake, sizeof(sm_handshake),
+                         secure_stream->send_ciphertext + sizeof(*aes_header), (u8*)&sm_handshake, sizeof(sm_handshake),
                          aes_header->tag, sizeof(aes_header->tag))) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);
@@ -533,7 +533,7 @@ os_net_secure_stream_connect(char *address, u16 port, EVP_PKEY *server_rsa_pub)
     SM_Handshake sm_handshake;
     if (!aes_gcm_decrypt(&secure_stream->recv_aes_key,
                          &secure_stream->recv_aes_iv,
-                         &sm_handshake, aes_payload, sizeof(sm_handshake),
+                         (u8*)&sm_handshake, aes_payload, sizeof(sm_handshake),
                          aes_header->tag, sizeof(aes_header->tag))) {
         close(fd);
         os_net_secure_stream_free(secure_stream_id);

@@ -4,13 +4,13 @@
 #include <client/generated/asset_sound_user_disconnected.c>
 
 Font *
-asset_manager_load_font() {
+asset_manager_load_font(void) {
     Font *font = (Font*)(g_asset_font + sizeof(g_asset_font) - sizeof(Font));
     i32 glyph_count = '~' - ' ' + 1;
     for (i32 i = 0; i < glyph_count; i++)
     {
         Glyph *glyph = font->glyphs + i;
-        glyph->bitmap.alphas = (void*)g_asset_font + (u64)(glyph->bitmap.alphas);
+        glyph->bitmap.data.grayscale = (u8*)g_asset_font + (u64)(glyph->bitmap.data.grayscale);
     }
     return font;
 }
